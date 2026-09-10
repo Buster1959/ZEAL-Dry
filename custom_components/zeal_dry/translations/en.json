@@ -18,7 +18,8 @@
       }
     },
     "error": {
-      "entity_not_found": "The selected entity is not currently available in Home Assistant."
+      "entity_not_found": "The selected entity is not currently available in Home Assistant.",
+      "zone_name_required": "Enter a name for this ZEAL-Dry zone."
     },
     "abort": {
       "already_configured": "A ZEAL-Dry zone with this name is already configured."
