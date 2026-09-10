@@ -17,6 +17,8 @@ async def async_get_config_entry_diagnostics(
     """Return non-sensitive diagnostics for one ZEAL-Dry zone."""
     controller = hass.data.get(DOMAIN, {}).get(DATA_CONTROLLERS, {}).get(entry.entry_id)
     reading = getattr(controller, "environmental_reading", None)
+    decision = getattr(controller, "decision", None)
+    thresholds = getattr(controller, "thresholds", None)
 
     return {
         "entry": {
@@ -31,12 +33,30 @@ async def async_get_config_entry_diagnostics(
             "humidity_entity": getattr(controller, "humidity_entity", None),
         },
         "environment": asdict(reading) if reading is not None else None,
+        "decision": asdict(decision) if decision is not None else None,
+        "thresholds": (
+            {
+                "preferred_rh": thresholds.preferred_rh,
+                "maximum_rh": thresholds.maximum_rh,
+                "critical_rh": thresholds.critical_rh,
+                "high_rh_persistence_seconds": int(
+                    thresholds.high_rh_persistence.total_seconds()
+                ),
+            }
+            if thresholds is not None
+            else None
+        ),
+        "above_maximum_since": (
+            getattr(controller, "above_maximum_since", None).isoformat()
+            if getattr(controller, "above_maximum_since", None) is not None
+            else None
+        ),
         "input_error": getattr(controller, "input_error", None),
         "last_updated": (
             getattr(controller, "last_updated", None).isoformat()
             if getattr(controller, "last_updated", None) is not None
             else None
         ),
-        "block": 2,
+        "block": 3,
         "control_active": False,
     }
