@@ -1,0 +1,35 @@
+{
+  "title": "ZEAL-Dry",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add a ZEAL-Dry zone",
+        "description": "Create one controlled area. Block 1 records the indoor sensors only; it does not control HVAC equipment.",
+        "data": {
+          "zone_name": "Zone name",
+          "temperature_entity": "Indoor temperature sensor",
+          "humidity_entity": "Indoor humidity sensor"
+        },
+        "data_description": {
+          "zone_name": "A unique name for this controlled area, for example Undercroft Bedroom.",
+          "temperature_entity": "Home Assistant temperature sensor for this area.",
+          "humidity_entity": "Home Assistant relative-humidity sensor for this area."
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "The selected entity is not currently available in Home Assistant."
+    },
+    "abort": {
+      "already_configured": "A ZEAL-Dry zone with this name is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "ZEAL-Dry options",
+        "description": "No tuning options are active in Block 1. They will be added only when their control modules are implemented."
+      }
+    }
+  }
+}
