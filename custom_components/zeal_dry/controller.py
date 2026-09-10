@@ -8,11 +8,11 @@ A supplier-neutral switch actuator may be used for safe dummy-rig testing.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN, UnitOfTemperature
 from homeassistant.core import Event, HomeAssistant, State, callback
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import async_track_state_change_event, async_track_time_interval
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
 
@@ -27,6 +27,7 @@ from .setpoint import DrySetpointConfig, DrySetpointResult, calculate_dry_setpoi
 from .state_machine import ControllerState, StateSnapshot, TimingConfig, next_state
 
 DUMMY_ACU_ENTITY = "switch.zeal_dry_dummy_acu"
+EVALUATION_INTERVAL = timedelta(minutes=1)
 
 
 @dataclass(slots=True)
@@ -49,6 +50,7 @@ class ZealDryController:
     last_updated: datetime | None = None
     above_maximum_since: datetime | None = None
     _remove_listener: object | None = field(default=None, init=False, repr=False)
+    _remove_interval: object | None = field(default=None, init=False, repr=False)
     _actuator: SwitchActuator | None = field(default=None, init=False, repr=False)
 
     async def async_start(self) -> None:
@@ -59,17 +61,30 @@ class ZealDryController:
             [self.temperature_entity, self.humidity_entity],
             self._async_sensor_changed,
         )
+        self._remove_interval = async_track_time_interval(
+            self.hass,
+            self._async_periodic_tick,
+            EVALUATION_INTERVAL,
+        )
         await self._async_refresh_environment()
 
     async def async_stop(self) -> None:
         """Stop observing sensors and release runtime resources."""
         if callable(self._remove_listener):
             self._remove_listener()
+        if callable(self._remove_interval):
+            self._remove_interval()
         self._remove_listener = None
+        self._remove_interval = None
 
     @callback
     def _async_sensor_changed(self, event: Event) -> None:
         """Refresh environmental values when either input changes."""
+        self.hass.async_create_task(self._async_refresh_environment())
+
+    @callback
+    def _async_periodic_tick(self, now: datetime) -> None:
+        """Re-evaluate persistence and runtime timers even with static sensors."""
         self.hass.async_create_task(self._async_refresh_environment())
 
     async def _async_refresh_environment(self) -> None:
