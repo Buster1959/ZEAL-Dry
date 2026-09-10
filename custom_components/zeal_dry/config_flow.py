@@ -5,7 +5,6 @@ from __future__ import annotations
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import PERCENTAGE, UnitOfTemperature
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
@@ -27,19 +26,23 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            zone_name = user_input[CONF_ZONE_NAME].strip()
             temperature_entity = user_input[CONF_TEMPERATURE_ENTITY]
             humidity_entity = user_input[CONF_HUMIDITY_ENTITY]
 
+            if not zone_name:
+                errors[CONF_ZONE_NAME] = "zone_name_required"
             if self.hass.states.get(temperature_entity) is None:
                 errors[CONF_TEMPERATURE_ENTITY] = "entity_not_found"
             if self.hass.states.get(humidity_entity) is None:
                 errors[CONF_HUMIDITY_ENTITY] = "entity_not_found"
 
             if not errors:
-                zone_name = user_input[CONF_ZONE_NAME].strip()
                 await self.async_set_unique_id(zone_name.casefold())
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=zone_name, data=user_input)
+                data = dict(user_input)
+                data[CONF_ZONE_NAME] = zone_name
+                return self.async_create_entry(title=zone_name, data=data)
 
         schema = vol.Schema(
             {
