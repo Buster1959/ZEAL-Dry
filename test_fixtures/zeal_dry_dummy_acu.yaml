@@ -1,0 +1,140 @@
+# =============================================================================
+# ZEAL-Dry dev/test fixture — dummy ACU actuator
+# =============================================================================
+#
+# Provides a safe Home Assistant test rig for ZEAL-Dry without touching a real
+# air-conditioning unit.
+#
+# Entities created:
+#   input_number.zeal_dry_test_temperature      Adjustable room temperature
+#   input_number.zeal_dry_test_humidity         Adjustable room RH
+#   input_boolean.zeal_dry_dummy_acu_internal   Internal actuator state
+#   switch.zeal_dry_dummy_acu                   Actuator ZEAL-Dry can control
+#   sensor.zeal_dry_test_temperature            Temperature sensor for setup
+#   sensor.zeal_dry_test_humidity               Humidity sensor for setup
+#   sensor.zeal_dry_dummy_acu_cycle_runtime     Minutes in current ON cycle
+#   sensor.zeal_dry_dummy_acu_runtime_today     Hours ON since midnight
+#
+# HOW TO USE
+# 1. Add this file as a Home Assistant package, or merge it into configuration.
+# 2. Restart Home Assistant.
+# 3. Create a ZEAL-Dry zone using the two test sensors.
+# 4. Change the input_numbers to simulate environmental conditions.
+# 5. Use switch.zeal_dry_dummy_acu as the test actuator when actuator selection
+#    is enabled in ZEAL-Dry.
+# =============================================================================
+
+input_number:
+  zeal_dry_test_temperature:
+    name: "ZEAL-Dry Test Temperature Input"
+    min: 5
+    max: 35
+    step: 0.1
+    unit_of_measurement: "°C"
+    mode: box
+    initial: 17.2
+
+  zeal_dry_test_humidity:
+    name: "ZEAL-Dry Test Humidity Input"
+    min: 20
+    max: 100
+    step: 1
+    unit_of_measurement: "%"
+    mode: box
+    initial: 60
+
+input_boolean:
+  zeal_dry_dummy_acu_internal:
+    name: "ZEAL-Dry Dummy ACU Internal"
+
+input_datetime:
+  zeal_dry_dummy_acu_started:
+    name: "ZEAL-Dry Dummy ACU Started"
+    has_date: true
+    has_time: true
+
+  zeal_dry_dummy_acu_stopped:
+    name: "ZEAL-Dry Dummy ACU Stopped"
+    has_date: true
+    has_time: true
+
+template:
+  - sensor:
+      - name: "ZEAL-Dry Test Temperature"
+        unique_id: zeal_dry_test_temperature_sensor
+        device_class: temperature
+        state_class: measurement
+        unit_of_measurement: "°C"
+        state: "{{ states('input_number.zeal_dry_test_temperature') }}"
+
+      - name: "ZEAL-Dry Test Humidity"
+        unique_id: zeal_dry_test_humidity_sensor
+        device_class: humidity
+        state_class: measurement
+        unit_of_measurement: "%"
+        state: "{{ states('input_number.zeal_dry_test_humidity') }}"
+
+      - name: "ZEAL-Dry Dummy ACU Cycle Runtime"
+        unique_id: zeal_dry_dummy_acu_cycle_runtime
+        unit_of_measurement: "min"
+        state_class: measurement
+        state: >
+          {% if is_state('switch.zeal_dry_dummy_acu', 'on') %}
+            {% set started = states('input_datetime.zeal_dry_dummy_acu_started') | as_datetime %}
+            {{ ((now() - started).total_seconds() / 60) | round(1) if started else 0 }}
+          {% else %}
+            0
+          {% endif %}
+
+  - switch:
+      - name: "ZEAL-Dry Dummy ACU"
+        unique_id: zeal_dry_dummy_acu_switch
+        icon: mdi:air-conditioner
+        state: "{{ is_state('input_boolean.zeal_dry_dummy_acu_internal', 'on') }}"
+        turn_on:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.zeal_dry_dummy_acu_internal
+        turn_off:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.zeal_dry_dummy_acu_internal
+
+sensor:
+  - platform: history_stats
+    name: "ZEAL-Dry Dummy ACU Runtime Today"
+    unique_id: zeal_dry_dummy_acu_runtime_today
+    entity_id: switch.zeal_dry_dummy_acu
+    state: "on"
+    type: time
+    start: "{{ today_at() }}"
+    end: "{{ now() }}"
+
+automation:
+  - id: zeal_dry_dummy_acu_record_started
+    alias: "ZEAL-Dry Dummy ACU - Record Started"
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: switch.zeal_dry_dummy_acu
+        to: "on"
+    actions:
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.zeal_dry_dummy_acu_started
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  - id: zeal_dry_dummy_acu_record_stopped
+    alias: "ZEAL-Dry Dummy ACU - Record Stopped"
+    mode: restart
+    triggers:
+      - trigger: state
+        entity_id: switch.zeal_dry_dummy_acu
+        to: "off"
+    actions:
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.zeal_dry_dummy_acu_stopped
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
