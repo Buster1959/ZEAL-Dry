@@ -19,6 +19,7 @@ async def async_get_config_entry_diagnostics(
     reading = getattr(controller, "environmental_reading", None)
     decision = getattr(controller, "decision", None)
     thresholds = getattr(controller, "thresholds", None)
+    state_snapshot = getattr(controller, "state_snapshot", None)
 
     return {
         "entry": {
@@ -34,6 +35,29 @@ async def async_get_config_entry_diagnostics(
         },
         "environment": asdict(reading) if reading is not None else None,
         "decision": asdict(decision) if decision is not None else None,
+        "controller_state": (
+            {
+                "state": state_snapshot.state.value,
+                "reason": state_snapshot.reason,
+                "entered_at": (
+                    state_snapshot.entered_at.isoformat()
+                    if state_snapshot.entered_at is not None
+                    else None
+                ),
+                "drying_started_at": (
+                    state_snapshot.drying_started_at.isoformat()
+                    if state_snapshot.drying_started_at is not None
+                    else None
+                ),
+                "drying_stopped_at": (
+                    state_snapshot.drying_stopped_at.isoformat()
+                    if state_snapshot.drying_stopped_at is not None
+                    else None
+                ),
+            }
+            if state_snapshot is not None
+            else None
+        ),
         "thresholds": (
             {
                 "preferred_rh": thresholds.preferred_rh,
@@ -57,6 +81,6 @@ async def async_get_config_entry_diagnostics(
             if getattr(controller, "last_updated", None) is not None
             else None
         ),
-        "block": 3,
+        "block": 4,
         "control_active": False,
     }
