@@ -2,7 +2,7 @@
 
 Blocks 2-5 observe indoor conditions, calculate environmental values, evaluate
 moisture risk, maintain controller state, and calculate a proposed Dry target.
-HVAC control is not enabled yet.
+A supplier-neutral switch actuator may be used for safe dummy-rig testing.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
 
+from .actuator import SwitchActuator
 from .decision import DryingDecision, MoistureThresholds, evaluate_moisture
 from .environment import (
     EnvironmentalInputError,
@@ -23,12 +24,14 @@ from .environment import (
     build_environmental_reading,
 )
 from .setpoint import DrySetpointConfig, DrySetpointResult, calculate_dry_setpoint
-from .state_machine import StateSnapshot, TimingConfig, next_state
+from .state_machine import ControllerState, StateSnapshot, TimingConfig, next_state
+
+DUMMY_ACU_ENTITY = "switch.zeal_dry_dummy_acu"
 
 
 @dataclass(slots=True)
 class ZealDryController:
-    """Own runtime environmental, decision, state, and proposed target data."""
+    """Own runtime environmental, decision, state, target, and test actuator data."""
 
     hass: HomeAssistant
     entry_id: str
@@ -46,15 +49,17 @@ class ZealDryController:
     last_updated: datetime | None = None
     above_maximum_since: datetime | None = None
     _remove_listener: object | None = field(default=None, init=False, repr=False)
+    _actuator: SwitchActuator | None = field(default=None, init=False, repr=False)
 
     async def async_start(self) -> None:
         """Start observing the configured indoor sensors."""
+        self._actuator = SwitchActuator(self.hass, DUMMY_ACU_ENTITY)
         self._remove_listener = async_track_state_change_event(
             self.hass,
             [self.temperature_entity, self.humidity_entity],
             self._async_sensor_changed,
         )
-        self._refresh_environment()
+        await self._async_refresh_environment()
 
     async def async_stop(self) -> None:
         """Stop observing sensors and release runtime resources."""
@@ -65,11 +70,10 @@ class ZealDryController:
     @callback
     def _async_sensor_changed(self, event: Event) -> None:
         """Refresh environmental values when either input changes."""
-        self._refresh_environment()
+        self.hass.async_create_task(self._async_refresh_environment())
 
-    @callback
-    def _refresh_environment(self) -> None:
-        """Read inputs, evaluate moisture, state, and proposed Dry target."""
+    async def _async_refresh_environment(self) -> None:
+        """Read inputs, evaluate moisture/state, then synchronize the dummy actuator."""
         temperature_state = self.hass.states.get(self.temperature_entity)
         humidity_state = self.hass.states.get(self.humidity_entity)
         now = dt_util.utcnow()
@@ -110,13 +114,22 @@ class ZealDryController:
             self.above_maximum_since = None
             self.decision = evaluate_moisture(None, self.thresholds)
 
+        action_permitted = self._actuator is not None and self._actuator.available
+        previous_state = self.state_snapshot.state
         self.state_snapshot = next_state(
             self.state_snapshot,
             self.decision,
             now,
             self.timing,
-            action_permitted=False,
+            action_permitted=action_permitted,
         )
+
+        if self._actuator is not None:
+            if self.state_snapshot.state is ControllerState.DRYING:
+                await self._actuator.async_turn_on()
+            elif previous_state is ControllerState.DRYING:
+                await self._actuator.async_turn_off()
+
         self.last_updated = now
 
     @staticmethod
