@@ -1,7 +1,7 @@
 """Runtime controller for one ZEAL-Dry zone.
 
-Block 3 observes indoor temperature and humidity, builds environmental
-measurements, and evaluates moisture risk/demand. It does not control HVAC.
+Blocks 2-4 observe indoor conditions, calculate environmental values, evaluate
+moisture risk, and maintain controller state. HVAC control is not enabled yet.
 """
 
 from __future__ import annotations
@@ -21,11 +21,12 @@ from .environment import (
     EnvironmentalReading,
     build_environmental_reading,
 )
+from .state_machine import StateSnapshot, TimingConfig, next_state
 
 
 @dataclass(slots=True)
 class ZealDryController:
-    """Own the runtime environmental and decision state for one zone."""
+    """Own runtime environmental, decision, and state data for one zone."""
 
     hass: HomeAssistant
     entry_id: str
@@ -33,8 +34,10 @@ class ZealDryController:
     temperature_entity: str
     humidity_entity: str
     thresholds: MoistureThresholds = field(default_factory=MoistureThresholds)
+    timing: TimingConfig = field(default_factory=TimingConfig)
     environmental_reading: EnvironmentalReading | None = None
     decision: DryingDecision | None = None
+    state_snapshot: StateSnapshot = field(default_factory=StateSnapshot)
     input_error: str | None = None
     last_updated: datetime | None = None
     above_maximum_since: datetime | None = None
@@ -62,7 +65,7 @@ class ZealDryController:
 
     @callback
     def _refresh_environment(self) -> None:
-        """Read inputs, calculate environment, and update moisture assessment."""
+        """Read inputs, evaluate moisture, and update monitoring state."""
         temperature_state = self.hass.states.get(self.temperature_entity)
         humidity_state = self.hass.states.get(self.humidity_entity)
         now = dt_util.utcnow()
@@ -98,6 +101,13 @@ class ZealDryController:
             self.above_maximum_since = None
             self.decision = evaluate_moisture(None, self.thresholds)
 
+        self.state_snapshot = next_state(
+            self.state_snapshot,
+            self.decision,
+            now,
+            self.timing,
+            action_permitted=False,
+        )
         self.last_updated = now
 
     @staticmethod
