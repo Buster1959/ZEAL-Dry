@@ -20,6 +20,8 @@ async def async_get_config_entry_diagnostics(
     decision = getattr(controller, "decision", None)
     thresholds = getattr(controller, "thresholds", None)
     state_snapshot = getattr(controller, "state_snapshot", None)
+    proposed_setpoint = getattr(controller, "proposed_setpoint", None)
+    setpoint_config = getattr(controller, "setpoint_config", None)
 
     return {
         "entry": {
@@ -35,6 +37,12 @@ async def async_get_config_entry_diagnostics(
         },
         "environment": asdict(reading) if reading is not None else None,
         "decision": asdict(decision) if decision is not None else None,
+        "proposed_dry_setpoint": (
+            asdict(proposed_setpoint) if proposed_setpoint is not None else None
+        ),
+        "dry_setpoint_config": (
+            asdict(setpoint_config) if setpoint_config is not None else None
+        ),
         "controller_state": (
             {
                 "state": state_snapshot.state.value,
@@ -81,6 +89,6 @@ async def async_get_config_entry_diagnostics(
             if getattr(controller, "last_updated", None) is not None
             else None
         ),
-        "block": 4,
+        "block": 5,
         "control_active": False,
     }
