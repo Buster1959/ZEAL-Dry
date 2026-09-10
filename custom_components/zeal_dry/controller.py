@@ -1,7 +1,8 @@
 """Runtime controller for one ZEAL-Dry zone.
 
-Blocks 2-4 observe indoor conditions, calculate environmental values, evaluate
-moisture risk, and maintain controller state. HVAC control is not enabled yet.
+Blocks 2-5 observe indoor conditions, calculate environmental values, evaluate
+moisture risk, maintain controller state, and calculate a proposed Dry target.
+HVAC control is not enabled yet.
 """
 
 from __future__ import annotations
@@ -21,12 +22,13 @@ from .environment import (
     EnvironmentalReading,
     build_environmental_reading,
 )
+from .setpoint import DrySetpointConfig, DrySetpointResult, calculate_dry_setpoint
 from .state_machine import StateSnapshot, TimingConfig, next_state
 
 
 @dataclass(slots=True)
 class ZealDryController:
-    """Own runtime environmental, decision, and state data for one zone."""
+    """Own runtime environmental, decision, state, and proposed target data."""
 
     hass: HomeAssistant
     entry_id: str
@@ -35,9 +37,11 @@ class ZealDryController:
     humidity_entity: str
     thresholds: MoistureThresholds = field(default_factory=MoistureThresholds)
     timing: TimingConfig = field(default_factory=TimingConfig)
+    setpoint_config: DrySetpointConfig = field(default_factory=DrySetpointConfig)
     environmental_reading: EnvironmentalReading | None = None
     decision: DryingDecision | None = None
     state_snapshot: StateSnapshot = field(default_factory=StateSnapshot)
+    proposed_setpoint: DrySetpointResult | None = None
     input_error: str | None = None
     last_updated: datetime | None = None
     above_maximum_since: datetime | None = None
@@ -65,7 +69,7 @@ class ZealDryController:
 
     @callback
     def _refresh_environment(self) -> None:
-        """Read inputs, evaluate moisture, and update monitoring state."""
+        """Read inputs, evaluate moisture, state, and proposed Dry target."""
         temperature_state = self.hass.states.get(self.temperature_entity)
         humidity_state = self.hass.states.get(self.humidity_entity)
         now = dt_util.utcnow()
@@ -76,6 +80,10 @@ class ZealDryController:
             self.environmental_reading = build_environmental_reading(
                 temperature_c,
                 humidity,
+            )
+            self.proposed_setpoint = calculate_dry_setpoint(
+                temperature_c,
+                self.setpoint_config,
             )
             self.input_error = None
 
@@ -97,6 +105,7 @@ class ZealDryController:
             )
         except EnvironmentalInputError as err:
             self.environmental_reading = None
+            self.proposed_setpoint = None
             self.input_error = str(err)
             self.above_maximum_since = None
             self.decision = evaluate_moisture(None, self.thresholds)
