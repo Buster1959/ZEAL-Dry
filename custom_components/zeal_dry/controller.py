@@ -12,7 +12,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
 
 from .actuator import DummyActuator
-from .const import CONTROL_MODE_DUMMY
+from .const import CONTROL_MODE_DUMMY, DEFAULT_CONTROL_MODE
 from .decision import DryingDecision, MoistureThresholds, evaluate_moisture
 from .environment import (
     EnvironmentalInputError,
@@ -34,7 +34,7 @@ class ZealDryController:
     zone_name: str
     temperature_entity: str
     humidity_entity: str
-    control_mode: str
+    control_mode: str = DEFAULT_CONTROL_MODE
     thresholds: MoistureThresholds = field(default_factory=MoistureThresholds)
     timing: TimingConfig = field(default_factory=TimingConfig)
     setpoint_config: DrySetpointConfig = field(default_factory=DrySetpointConfig)
