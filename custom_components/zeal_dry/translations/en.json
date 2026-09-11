@@ -4,19 +4,27 @@
     "step": {
       "user": {
         "title": "Add a ZEAL-Dry zone",
-        "description": "Create one ZEAL-Dry area and choose whether it should monitor only or use the built-in dummy ACU for safe testing.",
+        "description": "Choose Monitoring only for real room sensors, or Test / Dummy ACU for a completely self-contained test bench.",
         "data": {
           "zone_name": "Zone name",
-          "temperature_entity": "Indoor temperature sensor",
-          "humidity_entity": "Indoor humidity sensor",
           "control_mode": "Control mode"
         },
         "data_description": {
-          "zone_name": "A unique name for this controlled area, for example Undercroft Bedroom.",
-          "temperature_entity": "Home Assistant temperature sensor for this area.",
-          "humidity_entity": "Home Assistant relative-humidity sensor for this area.",
-          "control_mode": "Monitoring only never operates an actuator. Test / Dummy ACU creates an internal test actuator so you can watch ZEAL-Dry switch drying on and off without controlling real equipment."
+          "zone_name": "A unique name for this area, for example ZEAL-Dry Test.",
+          "control_mode": "Test / Dummy ACU creates adjustable temperature and humidity plus an internal dummy ACU. It cannot control real equipment."
         }
+      },
+      "sensors": {
+        "title": "Select indoor sensors",
+        "description": "Choose the real Home Assistant sensors ZEAL-Dry should monitor.",
+        "data": {
+          "temperature_entity": "Indoor temperature sensor",
+          "humidity_entity": "Indoor humidity sensor"
+        }
+      },
+      "dummy": {
+        "title": "Create ZEAL-Dry test bench",
+        "description": "This creates adjustable Test temperature and Test humidity controls and a built-in Dummy ACU. Start at 18 °C and 55% RH, then raise humidity to test moisture demand safely."
       }
     },
     "error": {
