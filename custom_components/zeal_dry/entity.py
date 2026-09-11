@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import Event, callback
+from homeassistant.core import callback
 from homeassistant.helpers.entity import DeviceInfo, Entity
-from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import DOMAIN
 from .controller import ZealDryController
@@ -29,20 +28,14 @@ class ZealDryEntity(Entity):
         self._remove_listener = None
 
     async def async_added_to_hass(self) -> None:
-        """Update the entity whenever either configured input changes."""
-        self._remove_listener = async_track_state_change_event(
-            self.hass,
-            [self.controller.temperature_entity, self.controller.humidity_entity],
-            self._async_source_changed,
-        )
+        """Update after each complete controller evaluation."""
+        self._remove_listener = self.controller.add_listener(self._async_controller_updated)
 
     async def async_will_remove_from_hass(self) -> None:
-        """Release the input listener."""
         if self._remove_listener is not None:
             self._remove_listener()
             self._remove_listener = None
 
     @callback
-    def _async_source_changed(self, event: Event) -> None:
-        """Publish the controller's freshly calculated values."""
+    def _async_controller_updated(self) -> None:
         self.async_write_ha_state()
