@@ -1,9 +1,4 @@
-"""Runtime controller for one ZEAL-Dry zone.
-
-Blocks 2-5 observe indoor conditions, calculate environmental values, evaluate
-moisture risk, maintain controller state, and calculate a proposed Dry target.
-A supplier-neutral switch actuator may be used for safe dummy-rig testing.
-"""
+"""Runtime controller for one ZEAL-Dry zone."""
 
 from __future__ import annotations
 
@@ -16,7 +11,8 @@ from homeassistant.helpers.event import async_track_state_change_event, async_tr
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
 
-from .actuator import SwitchActuator
+from .actuator import DummyActuator
+from .const import CONTROL_MODE_DUMMY
 from .decision import DryingDecision, MoistureThresholds, evaluate_moisture
 from .environment import (
     EnvironmentalInputError,
@@ -26,7 +22,6 @@ from .environment import (
 from .setpoint import DrySetpointConfig, DrySetpointResult, calculate_dry_setpoint
 from .state_machine import ControllerState, StateSnapshot, TimingConfig, next_state
 
-DUMMY_ACU_ENTITY = "switch.zeal_dry_dummy_acu"
 EVALUATION_INTERVAL = timedelta(minutes=1)
 
 
@@ -39,6 +34,7 @@ class ZealDryController:
     zone_name: str
     temperature_entity: str
     humidity_entity: str
+    control_mode: str
     thresholds: MoistureThresholds = field(default_factory=MoistureThresholds)
     timing: TimingConfig = field(default_factory=TimingConfig)
     setpoint_config: DrySetpointConfig = field(default_factory=DrySetpointConfig)
@@ -49,13 +45,15 @@ class ZealDryController:
     input_error: str | None = None
     last_updated: datetime | None = None
     above_maximum_since: datetime | None = None
+    actuator: DummyActuator | None = field(default=None, init=False)
     _remove_listener: object | None = field(default=None, init=False, repr=False)
     _remove_interval: object | None = field(default=None, init=False, repr=False)
-    _actuator: SwitchActuator | None = field(default=None, init=False, repr=False)
 
     async def async_start(self) -> None:
         """Start observing the configured indoor sensors."""
-        self._actuator = SwitchActuator(self.hass, DUMMY_ACU_ENTITY)
+        if self.control_mode == CONTROL_MODE_DUMMY:
+            self.actuator = DummyActuator()
+
         self._remove_listener = async_track_state_change_event(
             self.hass,
             [self.temperature_entity, self.humidity_entity],
@@ -70,6 +68,8 @@ class ZealDryController:
 
     async def async_stop(self) -> None:
         """Stop observing sensors and release runtime resources."""
+        if self.actuator is not None:
+            await self.actuator.async_turn_off()
         if callable(self._remove_listener):
             self._remove_listener()
         if callable(self._remove_interval):
@@ -88,7 +88,7 @@ class ZealDryController:
         self.hass.async_create_task(self._async_refresh_environment())
 
     async def _async_refresh_environment(self) -> None:
-        """Read inputs, evaluate moisture/state, then synchronize the dummy actuator."""
+        """Read inputs, evaluate moisture/state, then synchronize the test actuator."""
         temperature_state = self.hass.states.get(self.temperature_entity)
         humidity_state = self.hass.states.get(self.humidity_entity)
         now = dt_util.utcnow()
@@ -129,7 +129,7 @@ class ZealDryController:
             self.above_maximum_since = None
             self.decision = evaluate_moisture(None, self.thresholds)
 
-        action_permitted = self._actuator is not None and self._actuator.available
+        action_permitted = self.actuator is not None and self.actuator.available
         previous_state = self.state_snapshot.state
         self.state_snapshot = next_state(
             self.state_snapshot,
@@ -139,11 +139,11 @@ class ZealDryController:
             action_permitted=action_permitted,
         )
 
-        if self._actuator is not None:
+        if self.actuator is not None:
             if self.state_snapshot.state is ControllerState.DRYING:
-                await self._actuator.async_turn_on()
+                await self.actuator.async_turn_on()
             elif previous_state is ControllerState.DRYING:
-                await self._actuator.async_turn_off()
+                await self.actuator.async_turn_off()
 
         self.last_updated = now
 
