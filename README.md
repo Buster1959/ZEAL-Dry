@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/brand/ZEAL-Dry-logo.svg" alt="ZEAL-Dry logo" width="360">
+</p>
+
 # ZEAL-Dry
 
 **Intelligent moisture protection for the spaces you leave behind.**
@@ -15,13 +19,14 @@ After installing in HACS:
 1. Restart Home Assistant.
 2. Go to **Settings → Devices & services → Add Integration**.
 3. Search for **ZEAL-Dry**.
-4. Create your first ZEAL-Dry zone and select its temperature and humidity sensors.
+4. Create a zone.
+5. Choose **Monitoring only** to use real temperature and humidity sensors, or **Test / Dummy ACU** for the built-in adjustable test bench.
 
 ## Current development status
 
 ZEAL-Dry is under active development. The current build is intended for monitoring and dummy-actuator testing before any real HVAC equipment is controlled.
 
-The development test rig is being moved into the integration so HACS installation can remain a single installation path without requiring a separate YAML package.
+The built-in test mode provides adjustable temperature and humidity values plus a dummy ACU so the moisture and dew-point control logic can be exercised without external YAML or real equipment.
 
 ## Documentation
 
@@ -34,6 +39,7 @@ Detailed project documentation is under [`/docs`](docs/), including:
 - Development plan
 - UI design
 - Project positioning
+- Brand assets
 
 ## Important scope boundary
 
