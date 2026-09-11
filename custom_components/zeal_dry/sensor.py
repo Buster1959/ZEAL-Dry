@@ -81,7 +81,7 @@ SENSORS = (
     ZealDrySensorDescription(
         key="decision_reason",
         name="Decision reason",
-        value_fn=lambda c: c.decision.explanation if c.decision else c.input_error,
+        value_fn=lambda c: c.decision.reason if c.decision else c.input_error,
     ),
     ZealDrySensorDescription(
         key="proposed_dry_target",
@@ -91,6 +91,20 @@ SENSORS = (
         value_fn=lambda c: (
             round(c.proposed_setpoint.applied_target_c, 1)
             if c.proposed_setpoint else None
+        ),
+    ),
+    ZealDrySensorDescription(
+        key="control_mode",
+        name="Control mode",
+        value_fn=lambda c: c.control_mode,
+    ),
+    ZealDrySensorDescription(
+        key="dummy_acu_runtime",
+        name="Dummy ACU runtime",
+        native_unit_of_measurement="min",
+        state_class="measurement",
+        value_fn=lambda c: (
+            round(c.actuator.runtime_minutes(), 1) if c.actuator is not None else None
         ),
     ),
 )
