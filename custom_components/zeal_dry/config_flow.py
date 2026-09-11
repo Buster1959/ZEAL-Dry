@@ -9,9 +9,13 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_CONTROL_MODE,
     CONF_HUMIDITY_ENTITY,
     CONF_TEMPERATURE_ENTITY,
     CONF_ZONE_NAME,
+    CONTROL_MODE_DUMMY,
+    CONTROL_MODE_MONITOR,
+    DEFAULT_CONTROL_MODE,
     DOMAIN,
 )
 
@@ -59,6 +63,24 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         device_class="humidity",
                     )
                 ),
+                vol.Required(
+                    CONF_CONTROL_MODE,
+                    default=DEFAULT_CONTROL_MODE,
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {
+                                "value": CONTROL_MODE_MONITOR,
+                                "label": "Monitoring only",
+                            },
+                            {
+                                "value": CONTROL_MODE_DUMMY,
+                                "label": "Test / Dummy ACU",
+                            },
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                    )
+                ),
             }
         )
 
@@ -71,7 +93,7 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        """Return the Block 1 options-flow shell."""
+        """Return the ZEAL-Dry options-flow shell."""
         return ZealDryOptionsFlow()
 
 
@@ -79,7 +101,7 @@ class ZealDryOptionsFlow(config_entries.OptionsFlow):
     """Options-flow shell for later tuning controls."""
 
     async def async_step_init(self, user_input=None):
-        """Show that no runtime tuning options are defined in Block 1."""
+        """Show the current options-flow shell."""
         if user_input is not None:
             return self.async_create_entry(title="", data={})
 
