@@ -7,15 +7,17 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_CONTROL_MODE,
     CONF_HUMIDITY_ENTITY,
     CONF_TEMPERATURE_ENTITY,
     CONF_ZONE_NAME,
     DATA_CONTROLLERS,
+    DEFAULT_CONTROL_MODE,
     DOMAIN,
 )
 from .controller import ZealDryController
 
-PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -36,6 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         zone_name=entry.data[CONF_ZONE_NAME],
         temperature_entity=entry.data[CONF_TEMPERATURE_ENTITY],
         humidity_entity=entry.data[CONF_HUMIDITY_ENTITY],
+        control_mode=entry.data.get(CONF_CONTROL_MODE, DEFAULT_CONTROL_MODE),
     )
     controllers[entry.entry_id] = controller
     await controller.async_start()
