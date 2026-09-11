@@ -17,43 +17,37 @@ from .const import (
 )
 from .controller import ZealDryController
 
-PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH]
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH, Platform.NUMBER]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up the ZEAL-Dry integration."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault(DATA_CONTROLLERS, {})
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up one ZEAL-Dry zone from a config entry."""
     hass.data.setdefault(DOMAIN, {})
     controllers = hass.data[DOMAIN].setdefault(DATA_CONTROLLERS, {})
-
     controller = ZealDryController(
         hass=hass,
         entry_id=entry.entry_id,
         zone_name=entry.data[CONF_ZONE_NAME],
-        temperature_entity=entry.data[CONF_TEMPERATURE_ENTITY],
-        humidity_entity=entry.data[CONF_HUMIDITY_ENTITY],
+        temperature_entity=entry.data.get(CONF_TEMPERATURE_ENTITY),
+        humidity_entity=entry.data.get(CONF_HUMIDITY_ENTITY),
         control_mode=entry.data.get(CONF_CONTROL_MODE, DEFAULT_CONTROL_MODE),
     )
     controllers[entry.entry_id] = controller
     await controller.async_start()
-
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload one ZEAL-Dry zone."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unload_ok:
         return False
-
     controller = hass.data[DOMAIN][DATA_CONTROLLERS].pop(entry.entry_id, None)
     if controller is not None:
         await controller.async_stop()
@@ -61,5 +55,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload ZEAL-Dry when its config entry is updated."""
     await hass.config_entries.async_reload(entry.entry_id)
