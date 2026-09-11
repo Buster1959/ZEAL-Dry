@@ -26,74 +26,93 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None):
-        """Create one ZEAL-Dry controlled zone."""
-        errors: dict[str, str] = {}
-
+        """Choose the zone name and operating mode."""
         if user_input is not None:
-            zone_name = user_input[CONF_ZONE_NAME].strip()
-            temperature_entity = user_input[CONF_TEMPERATURE_ENTITY]
-            humidity_entity = user_input[CONF_HUMIDITY_ENTITY]
+            self._zone_name = user_input[CONF_ZONE_NAME].strip()
+            self._control_mode = user_input[CONF_CONTROL_MODE]
+            if not self._zone_name:
+                return self.async_show_form(
+                    step_id="user",
+                    data_schema=self._user_schema(user_input),
+                    errors={CONF_ZONE_NAME: "zone_name_required"},
+                )
+            if self._control_mode == CONTROL_MODE_DUMMY:
+                return await self.async_step_dummy()
+            return await self.async_step_sensors()
 
-            if not zone_name:
-                errors[CONF_ZONE_NAME] = "zone_name_required"
-            if self.hass.states.get(temperature_entity) is None:
-                errors[CONF_TEMPERATURE_ENTITY] = "entity_not_found"
-            if self.hass.states.get(humidity_entity) is None:
-                errors[CONF_HUMIDITY_ENTITY] = "entity_not_found"
+        return self.async_show_form(step_id="user", data_schema=self._user_schema())
 
-            if not errors:
-                await self.async_set_unique_id(zone_name.casefold())
-                self._abort_if_unique_id_configured()
-                data = dict(user_input)
-                data[CONF_ZONE_NAME] = zone_name
-                return self.async_create_entry(title=zone_name, data=data)
-
+    def _user_schema(self, suggested=None):
         schema = vol.Schema(
             {
                 vol.Required(CONF_ZONE_NAME): selector.TextSelector(),
-                vol.Required(CONF_TEMPERATURE_ENTITY): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain="sensor",
-                        device_class="temperature",
-                    )
-                ),
-                vol.Required(CONF_HUMIDITY_ENTITY): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain="sensor",
-                        device_class="humidity",
-                    )
-                ),
-                vol.Required(
-                    CONF_CONTROL_MODE,
-                    default=DEFAULT_CONTROL_MODE,
-                ): selector.SelectSelector(
+                vol.Required(CONF_CONTROL_MODE, default=DEFAULT_CONTROL_MODE): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=[
-                            {
-                                "value": CONTROL_MODE_MONITOR,
-                                "label": "Monitoring only",
-                            },
-                            {
-                                "value": CONTROL_MODE_DUMMY,
-                                "label": "Test / Dummy ACU",
-                            },
+                            {"value": CONTROL_MODE_MONITOR, "label": "Monitoring only"},
+                            {"value": CONTROL_MODE_DUMMY, "label": "Test / Dummy ACU"},
                         ],
                         mode=selector.SelectSelectorMode.LIST,
                     )
                 ),
             }
         )
+        return self.add_suggested_values_to_schema(schema, suggested)
 
+    async def async_step_sensors(self, user_input=None):
+        """Select real indoor sensors for monitoring mode."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            temperature_entity = user_input[CONF_TEMPERATURE_ENTITY]
+            humidity_entity = user_input[CONF_HUMIDITY_ENTITY]
+            if self.hass.states.get(temperature_entity) is None:
+                errors[CONF_TEMPERATURE_ENTITY] = "entity_not_found"
+            if self.hass.states.get(humidity_entity) is None:
+                errors[CONF_HUMIDITY_ENTITY] = "entity_not_found"
+            if not errors:
+                return await self._async_create_zone(
+                    temperature_entity=temperature_entity,
+                    humidity_entity=humidity_entity,
+                )
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_TEMPERATURE_ENTITY): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+                ),
+                vol.Required(CONF_HUMIDITY_ENTITY): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+                ),
+            }
+        )
         return self.async_show_form(
-            step_id="user",
+            step_id="sensors",
             data_schema=self.add_suggested_values_to_schema(schema, user_input),
             errors=errors,
         )
 
+    async def async_step_dummy(self, user_input=None):
+        """Confirm creation of the self-contained test bench."""
+        if user_input is not None:
+            return await self._async_create_zone()
+        return self.async_show_form(step_id="dummy", data_schema=vol.Schema({}))
+
+    async def _async_create_zone(self, temperature_entity=None, humidity_entity=None):
+        await self.async_set_unique_id(self._zone_name.casefold())
+        self._abort_if_unique_id_configured()
+        data = {
+            CONF_ZONE_NAME: self._zone_name,
+            CONF_CONTROL_MODE: self._control_mode,
+        }
+        if temperature_entity is not None:
+            data[CONF_TEMPERATURE_ENTITY] = temperature_entity
+        if humidity_entity is not None:
+            data[CONF_HUMIDITY_ENTITY] = humidity_entity
+        return self.async_create_entry(title=self._zone_name, data=data)
+
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
-        """Return the ZEAL-Dry options-flow shell."""
         return ZealDryOptionsFlow()
 
 
@@ -101,11 +120,6 @@ class ZealDryOptionsFlow(config_entries.OptionsFlow):
     """Options-flow shell for later tuning controls."""
 
     async def async_step_init(self, user_input=None):
-        """Show the current options-flow shell."""
         if user_input is not None:
             return self.async_create_entry(title="", data={})
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema({}),
-        )
+        return self.async_show_form(step_id="init", data_schema=vol.Schema({}))
