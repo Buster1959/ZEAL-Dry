@@ -11,9 +11,9 @@ approximation.
   <img src="ZEAL-Dry-logo-approved.png" width="240" alt="ZEAL-Dry approved logo">
 </p>
 
-The supplied 702 × 737 PNG is the master and is retained byte-for-byte. It is
-the only repository logo file. The black footer visible in the approved source
-is part of that artwork and is retained.
+The supplied 702 × 701 PNG is the master and is retained byte-for-byte. It is
+the only repository logo file. It contains the approved logo without the
+unintended black export footer.
 
 Use the master PNG at a 240-pixel display width in Markdown headers. Do not set
 a fixed height; preserving the natural aspect ratio prevents distortion.
