@@ -1,16 +1,29 @@
 # ZEAL-Dry brand assets
 
-ZEAL-Dry uses the ZEAL family visual language with water droplets replacing the heat motif.
+The approved master artwork is
+[`ZEAL-Dry-logo-approved.png`](ZEAL-Dry-logo-approved.png). It is the sole
+authoritative ZEAL-Dry logo and must not be redrawn or substituted with an SVG
+approximation.
 
 ## Primary logo
 
-![ZEAL-Dry logo](ZEAL-Dry-logo.svg)
+<p align="center">
+  <img src="ZEAL-Dry-logo-approved.png" width="240" alt="ZEAL-Dry approved logo">
+</p>
 
-Use this artwork for documentation, repository branding and future Home Assistant presentation work.
+The supplied 702 × 737 PNG is the master and is retained byte-for-byte. It is
+the only repository logo file. The black footer visible in the approved source
+is part of that artwork and is retained.
 
-The current mark combines:
-- ZEAL family blue palette
-- house/protection motif
-- water droplets for airborne moisture
-- flowing water lines for drying and moisture control
-- ZEAL-Dry wordmark
+Use the master PNG at a 240-pixel display width in Markdown headers. Do not set
+a fixed height; preserving the natural aspect ratio prevents distortion.
+
+## Approved visual elements
+
+- polished house outline with chimney
+- three glossy blue water droplets
+- flowing blue wave lines
+- large ZEAL lettering
+- `— DRY —` treatment
+
+The retired `ZEAL-Dry-logo.svg` is not a valid branding asset.

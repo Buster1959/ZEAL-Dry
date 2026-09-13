@@ -1,4 +1,6 @@
-![ZEAL-Dry logo](docs/brand/ZEAL-Dry-logo.svg)
+<p align="center">
+  <img src="docs/brand/ZEAL-Dry-logo-approved.png" width="240" alt="ZEAL-Dry approved logo">
+</p>
 
 # ZEAL-Dry
 
