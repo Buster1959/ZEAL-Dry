@@ -31,16 +31,22 @@ The built-in test mode provides adjustable temperature and humidity values plus 
 
 ## Documentation
 
+- [Wiki — Getting Started](../../wiki/Getting-Started)
+- [Wiki — Instructions for Use](../../wiki/Instructions-for-Use)
+- [Wiki — Moisture Demand and Protection](../../wiki/Moisture-Demand-and-Protection)
+- [Wiki — Troubleshooting](../../wiki/Troubleshooting)
+- [Wiki — Documentation Ownership](../../wiki/Documentation-Ownership)
+
 Detailed project documentation is under [`/docs`](docs/), including:
 
-- Project definition
-- Architecture
-- Control model
-- Entity model
-- Development plan
-- UI design
-- Project positioning
-- Brand assets
+- [Project definition](docs/PROJECT_DEFINITION.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Control model](docs/CONTROL_MODEL.md)
+- [Entity model](docs/ENTITY_MODEL.md)
+- [Development plan](docs/DEVELOPMENT_PLAN.md)
+- [UI design](docs/UI_DESIGN.md)
+- [Project positioning](docs/PROJECT_POSITIONING.md)
+- [Brand assets](docs/brand/README.md)
 
 ## Important scope boundary
 
@@ -49,3 +55,11 @@ ZEAL-Dry manages airborne moisture, humidity, condensation and associated mould 
 ## License
 
 MIT License. See [`LICENSE`](LICENSE).
+
+The [wiki](../../wiki) is a separate Git repository. Clone both for complete
+offline user and technical documentation:
+
+```bash
+git clone https://github.com/Buster1959/ZEAL-Dry.git
+git clone https://github.com/Buster1959/ZEAL-Dry.wiki.git
+```
