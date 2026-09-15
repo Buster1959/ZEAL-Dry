@@ -16,6 +16,8 @@ from homeassistant.util.unit_conversion import TemperatureConverter
 
 @dataclass
 class ClimateAdapter:
+    """Send climate requests and track whether this zone must stop the AC."""
+
     hass: HomeAssistant
     entity_id: str
     owned: bool = False
@@ -25,6 +27,7 @@ class ClimateAdapter:
 
     @property
     def available(self):
+        """Check that the configured AC exists and reports an available state."""
         state = self.hass.states.get(self.entity_id) if self.entity_id else None
         return state is not None and state.state not in (
             STATE_UNAVAILABLE,
@@ -32,49 +35,73 @@ class ClimateAdapter:
         )
 
     def inspect(self):
+        """Require Dry and Off modes before returning device capabilities."""
         if not self.available:
             raise HomeAssistantError("equipment_unavailable")
         state = self.hass.states.get(self.entity_id)
-        attrs = state.attributes
-        if "dry" not in attrs.get("hvac_modes", []):
+        attributes = state.attributes
+        if "dry" not in attributes.get("hvac_modes", []):
             raise HomeAssistantError("dry_mode_unsupported")
-        if "off" not in attrs.get("hvac_modes", []):
+        if "off" not in attributes.get("hvac_modes", []):
             raise HomeAssistantError("off_mode_unsupported")
-        return attrs
+        return attributes
 
     def target(self, target_c, minimum_c, maximum_c):
         """Intersect configured bounds with the device grid, in device units."""
-        attrs = self.inspect()
-        if (
-            not int(attrs.get("supported_features", 0))
-            & ClimateEntityFeature.TARGET_TEMPERATURE
-        ):
-            return None
-        unit = attrs.get("temperature_unit", self.hass.config.units.temperature_unit)
-        convert = lambda value: TemperatureConverter.convert(
-            value, UnitOfTemperature.CELSIUS, unit
+        attributes = self.inspect()
+        supported_features = int(attributes.get("supported_features", 0))
+        supports_temperature = (
+            supported_features & ClimateEntityFeature.TARGET_TEMPERATURE
         )
+        if not supports_temperature:
+            return None
+        unit = attributes.get(
+            "temperature_unit", self.hass.config.units.temperature_unit
+        )
+
+        def to_device_units(value):
+            """Convert the configured Celsius values to the AC's temperature unit."""
+            return TemperatureConverter.convert(value, UnitOfTemperature.CELSIUS, unit)
+
         try:
-            low = float(attrs["min_temp"])
-            high = float(attrs["max_temp"])
-            step = float(attrs.get("target_temp_step", 1))
-            if not all(isfinite(v) for v in (low, high, step)) or step <= 0:
+            device_minimum = float(attributes["min_temp"])
+            device_maximum = float(attributes["max_temp"])
+            step = float(attributes.get("target_temp_step", 1))
+            if (
+                not all(isfinite(v) for v in (device_minimum, device_maximum, step))
+                or step <= 0
+            ):
                 raise ValueError
-            first = ceil((max(low, convert(minimum_c)) - low) / step - 1e-9)
-            last = floor((min(high, convert(maximum_c)) - low) / step + 1e-9)
-            if first > last:
+            # Find supported device steps inside both sets of temperature limits.
+            # The tiny tolerance prevents floating-point error from dropping a boundary step.
+            first_step = ceil(
+                (max(device_minimum, to_device_units(minimum_c)) - device_minimum)
+                / step
+                - 1e-9
+            )
+            last_step = floor(
+                (min(device_maximum, to_device_units(maximum_c)) - device_minimum)
+                / step
+                + 1e-9
+            )
+            if first_step > last_step:
                 raise ValueError
-            index = min(last, max(first, floor((convert(target_c) - low) / step + 0.5)))
-            return round(low + index * step, 6)
+            requested_step = floor(
+                (to_device_units(target_c) - device_minimum) / step + 0.5
+            )
+            target_step = min(last_step, max(first_step, requested_step))
+            return round(device_minimum + target_step * step, 6)
         except (KeyError, TypeError, ValueError) as err:
             raise HomeAssistantError("invalid_device_temperature_limits") from err
 
     async def _call(self, service, **data):
+        """Send one climate service request and wait for Home Assistant to complete it."""
         await self.hass.services.async_call(
             "climate", service, {"entity_id": self.entity_id, **data}, blocking=True
         )
 
     async def async_dry(self, target_c, minimum_c, maximum_c):
+        """Request Dry mode and its supported target, suppressing duplicate requests."""
         target = self.target(target_c, minimum_c, maximum_c)
         command = ("dry", target)
         if self.last_command == command:
@@ -99,6 +126,7 @@ class ClimateAdapter:
         )
 
     async def async_turn_off(self):
+        """Stop an owned AC; retain ownership if the stop must be retried."""
         if not self.owned:
             return
         if not self.available:

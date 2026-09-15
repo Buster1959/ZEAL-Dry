@@ -83,3 +83,17 @@ number/select service calls. Real hardware operation remains to be verified.
 
 API references: [Climate entity](https://developers.home-assistant.io/docs/core/entity/climate/)
 and [Home Assistant storage](https://github.com/home-assistant/core/blob/dev/homeassistant/helpers/storage.py).
+
+## Readability revision
+
+This revised 0.2.0 build retains the existing control behavior and test cases.
+The controller update is organized into input evaluation, protection checks and
+equipment requests. Local names are clearer, repeated fault updates share one
+method, and the unused switch actuator has been removed.
+
+Every production module, class and function now has a purpose annotation; the
+static audit covers 19 modules and 130 classes/functions. Additional comments
+explain restart protection, persistence and device rounding. `AGENTS.md` records
+the human-readable, annotated, no-bloat rules for future work.
+
+Retest: **68 passed**, plus import/unused-code lint and whitespace checks.

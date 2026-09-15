@@ -31,6 +31,7 @@ class ZealDryDummyAcuSwitch(ZealDryEntity, SwitchEntity):
     _attr_icon = "mdi:air-conditioner"
 
     def __init__(self, entry: ConfigEntry, controller: ZealDryController) -> None:
+        """Bind this entity to its zone controller and stable entity identifier."""
         super().__init__(entry, controller, "dummy_acu")
         self._remove_actuator_listener = None
 

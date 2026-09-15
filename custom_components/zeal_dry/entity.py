@@ -15,7 +15,10 @@ class ZealDryEntity(Entity):
 
     _attr_has_entity_name = True
 
-    def __init__(self, entry: ConfigEntry, controller: ZealDryController, key: str) -> None:
+    def __init__(
+        self, entry: ConfigEntry, controller: ZealDryController, key: str
+    ) -> None:
+        """Bind this entity to its zone controller and stable entity identifier."""
         self._entry = entry
         self.controller = controller
         self._attr_unique_id = f"{entry.entry_id}_{key}"
@@ -29,13 +32,17 @@ class ZealDryEntity(Entity):
 
     async def async_added_to_hass(self) -> None:
         """Update after each complete controller evaluation."""
-        self._remove_listener = self.controller.add_listener(self._async_controller_updated)
+        self._remove_listener = self.controller.add_listener(
+            self._async_controller_updated
+        )
 
     async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe this entity before Home Assistant removes it."""
         if self._remove_listener is not None:
             self._remove_listener()
             self._remove_listener = None
 
     @callback
     def _async_controller_updated(self) -> None:
+        """Publish the entity state after the controller finishes an evaluation."""
         self.async_write_ha_state()

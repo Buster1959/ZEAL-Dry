@@ -28,12 +28,14 @@ PLATFORMS = [
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Create the integration data container."""
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN].setdefault(DATA_CONTROLLERS, {})
     return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Start the zone controller and load its Home Assistant entity platforms."""
     hass.data.setdefault(DOMAIN, {})
     controllers = hass.data[DOMAIN].setdefault(DATA_CONTROLLERS, {})
     controller = ZealDryController(
@@ -53,6 +55,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload zone entities and stop the associated controller."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unload_ok:
         return False
@@ -63,4 +66,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the zone after its config-entry options change."""
     await hass.config_entries.async_reload(entry.entry_id)

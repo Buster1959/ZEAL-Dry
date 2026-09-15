@@ -18,6 +18,7 @@ class DrySetpointConfig:
     step_c: float = 1.0
 
     def __post_init__(self) -> None:
+        """Validate the strategy, finite target values and supported step size."""
         if self.strategy not in ("room_offset", "fixed"):
             raise ValueError("Unknown Dry strategy")
         if not all(

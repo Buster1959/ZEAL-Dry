@@ -3,7 +3,7 @@
 from dataclasses import asdict, dataclass
 from math import isfinite
 
-# key: (label, minimum, maximum, step, unit)
+# Numeric controls: each entry defines its label, range, step and display unit.
 NUMBER_SETTINGS = {
     "preferred_rh": ("Preferred RH", 40, 75, 1, "%"),
     "maximum_rh": ("Maximum RH", 45, 85, 1, "%"),
@@ -12,10 +12,12 @@ NUMBER_SETTINGS = {
     "safety_margin_c": ("Dew-point safety margin", 0.5, 10, 0.1, "°C"),
     "fixed_target_c": ("Fixed Dry temperature", 16, 30, 0.5, "°C"),
 }
+# Selector controls: each entry defines its label and supported choices.
 SELECT_SETTINGS = {
     "profile": ("Operating profile", ["property_protection", "occupied", "off"]),
     "strategy": ("Dry temperature strategy", ["room_offset", "fixed"]),
 }
+# Less frequently changed options: each entry defines its allowed range.
 OPTION_SETTINGS = {
     "persistence_minutes": (0, 120),
     "minimum_run_minutes": (1, 120),
@@ -29,6 +31,8 @@ OPTION_SETTINGS = {
 
 @dataclass(frozen=True)
 class ZoneSettings:
+    """Store one validated set of user-adjustable moisture and timing settings."""
+
     preferred_rh: float = 60
     maximum_rh: float = 65
     critical_rh: float = 75
@@ -46,6 +50,7 @@ class ZoneSettings:
     maximum_c: float = 20
 
     def __post_init__(self):
+        """Reject out-of-range values and conflicting thresholds before use."""
         for key, (_, low, high, _, _) in NUMBER_SETTINGS.items():
             self._check(key, low, high)
         for key, (low, high) in OPTION_SETTINGS.items():
@@ -63,6 +68,7 @@ class ZoneSettings:
             raise ValueError("Minimum runtime must not exceed maximum runtime")
 
     def _check(self, key, low, high):
+        """Require a finite numeric value inside the allowed range."""
         value = getattr(self, key)
         if (
             isinstance(value, bool)
@@ -73,4 +79,5 @@ class ZoneSettings:
             raise ValueError(f"{key} must be between {low} and {high}")
 
     def as_dict(self):
+        """Return plain values suitable for persistent storage and diagnostics."""
         return asdict(self)

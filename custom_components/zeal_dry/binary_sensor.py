@@ -35,6 +35,7 @@ class ZealDryDemandSensor(ZealDryEntity, BinarySensorEntity):
     _attr_icon = "mdi:water-alert"
 
     def __init__(self, entry: ConfigEntry, controller: ZealDryController) -> None:
+        """Bind this entity to its zone controller and stable entity identifier."""
         super().__init__(entry, controller, "drying_required")
 
     @property
@@ -60,14 +61,18 @@ class ZealDryDemandSensor(ZealDryEntity, BinarySensorEntity):
 
 
 class ZealDryFaultSensor(ZealDryEntity, BinarySensorEntity):
+    """Show when an input or equipment fault needs attention."""
+
     _attr_name = "Fault"
     _attr_device_class = "problem"
 
     def __init__(self, entry, controller):
+        """Bind this entity to its zone controller and stable entity identifier."""
         super().__init__(entry, controller, "fault")
 
     @property
     def is_on(self):
+        """Return the condition represented by this binary sensor."""
         return (
             self.controller.state_snapshot.state.value == "fault"
             or self.controller.command_error is not None
@@ -75,18 +80,23 @@ class ZealDryFaultSensor(ZealDryEntity, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self):
+        """Expose the reason and supporting values for this status."""
         return {"reason": self.controller.command_error or self.controller.input_error}
 
 
 class ZealDryCondensationSensor(ZealDryEntity, BinarySensorEntity):
+    """Indicate air near saturation using the configured dew-point spread."""
+
     _attr_name = "Condensation risk"
     _attr_icon = "mdi:water-alert"
 
     def __init__(self, entry, controller):
+        """Bind this entity to its zone controller and stable entity identifier."""
         super().__init__(entry, controller, "condensation_risk")
 
     @property
     def is_on(self):
+        """Return the condition represented by this binary sensor."""
         reading = self.controller.environmental_reading
         return (
             reading.dew_point_spread_c <= self.controller.settings.safety_margin_c
@@ -96,6 +106,7 @@ class ZealDryCondensationSensor(ZealDryEntity, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self):
+        """Expose the reason and supporting values for this status."""
         return {
             "criterion": "room_temperature_minus_dew_point",
             "safety_margin_c": self.controller.settings.safety_margin_c,

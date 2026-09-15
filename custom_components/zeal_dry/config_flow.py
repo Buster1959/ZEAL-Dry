@@ -44,6 +44,7 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="user", data_schema=self._user_schema())
 
     def _user_schema(self, suggested=None):
+        """Build the zone-name and operating-mode form."""
         schema = vol.Schema(
             {
                 vol.Required(CONF_ZONE_NAME): selector.TextSelector(),
@@ -106,6 +107,7 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_climate(self, user_input=None):
+        """Validate the selected AC before creating a live-control zone."""
         errors = {}
         if user_input is not None:
             from homeassistant.exceptions import HomeAssistantError
@@ -141,6 +143,7 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="dummy", data_schema=vol.Schema({}))
 
     async def _async_create_zone(self, temperature_entity=None, humidity_entity=None):
+        """Store a uniquely named zone and its selected entities."""
         await self.async_set_unique_id(self._zone_name.casefold())
         self._abort_if_unique_id_configured()
         data = {
@@ -158,6 +161,7 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry):
+        """Provide the timing and temperature-limit options form."""
         return ZealDryOptionsFlow()
 
 
@@ -165,6 +169,7 @@ class ZealDryOptionsFlow(config_entries.OptionsFlow):
     """Less frequently changed timing and target bounds."""
 
     async def async_step_init(self, user_input=None):
+        """Validate and apply less frequently changed timing and target limits."""
         from .const import DATA_CONTROLLERS
         from .settings import OPTION_SETTINGS
 

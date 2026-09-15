@@ -17,6 +17,7 @@ from .settings import NUMBER_SETTINGS
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
+    """Create the Home Assistant entities belonging to this zone."""
     controller = hass.data[DOMAIN][DATA_CONTROLLERS][entry.entry_id]
     entities = [ZealDrySettingNumber(entry, controller, key) for key in NUMBER_SETTINGS]
     if entry.data.get(CONF_CONTROL_MODE) == CONTROL_MODE_DUMMY:
@@ -30,9 +31,12 @@ async def async_setup_entry(
 
 
 class ZealDrySettingNumber(ZealDryEntity, NumberEntity):
+    """Expose one validated numeric policy setting in Home Assistant."""
+
     _attr_mode = NumberMode.BOX
 
     def __init__(self, entry, controller, key):
+        """Bind this entity to its zone controller and stable entity identifier."""
         super().__init__(entry, controller, key)
         self.key = key
         (
@@ -45,9 +49,11 @@ class ZealDrySettingNumber(ZealDryEntity, NumberEntity):
 
     @property
     def native_value(self):
+        """Read the current value from the zone controller."""
         return getattr(self.controller.settings, self.key)
 
     async def async_set_native_value(self, value):
+        """Validate and apply the requested value through the controller."""
         try:
             await self.controller.async_update_settings(**{self.key: value})
         except ValueError as err:
@@ -66,13 +72,16 @@ class ZealDryTestTemperature(ZealDryEntity, NumberEntity):
     _attr_icon = "mdi:thermometer"
 
     def __init__(self, entry, controller):
+        """Bind this entity to its zone controller and stable entity identifier."""
         super().__init__(entry, controller, "test_temperature")
 
     @property
     def native_value(self):
+        """Read the current value from the zone controller."""
         return self.controller.test_temperature_c
 
     async def async_set_native_value(self, value: float) -> None:
+        """Validate and apply the requested value through the controller."""
         await self.controller.async_set_test_temperature(value)
 
 
@@ -88,11 +97,14 @@ class ZealDryTestHumidity(ZealDryEntity, NumberEntity):
     _attr_icon = "mdi:water-percent"
 
     def __init__(self, entry, controller):
+        """Bind this entity to its zone controller and stable entity identifier."""
         super().__init__(entry, controller, "test_humidity")
 
     @property
     def native_value(self):
+        """Read the current value from the zone controller."""
         return self.controller.test_humidity
 
     async def async_set_native_value(self, value: float) -> None:
+        """Validate and apply the requested value through the controller."""
         await self.controller.async_set_test_humidity(value)

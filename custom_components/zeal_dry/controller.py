@@ -84,10 +84,13 @@ class ZealDryController:
     )
 
     def add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Register an entity update callback and return its unsubscribe function."""
         self._listeners.add(listener)
         return lambda: self._listeners.discard(listener)
 
     async def async_start(self) -> None:
+        """Restore saved policy, prepare the actuator and subscribe to input updates."""
+        # Restore policy before preparing any equipment for control.
         self._store = Store(self.hass, 1, f"zeal_dry.{self.entry_id}")
         saved = await self._store.async_load()
         if saved and isinstance(saved, dict):
@@ -98,6 +101,7 @@ class ZealDryController:
         if not isinstance(saved, dict):
             saved = {}
         self._apply_settings()
+        # Interrupted live runs must stop and observe a fresh rest period.
         if self.control_mode == CONTROL_MODE_CLIMATE:
             self.state_snapshot = restore(saved, dt_util.utcnow())
             observed = (
@@ -121,6 +125,7 @@ class ZealDryController:
                 [self.temperature_entity, self.humidity_entity],
                 self._async_sensor_changed,
             )
+        # Sensor changes and periodic ticks both feed the same serialized update.
         self._remove_interval = async_track_time_interval(
             self.hass, self._async_periodic_tick, EVALUATION_INTERVAL
         )
@@ -130,10 +135,12 @@ class ZealDryController:
         await self.async_refresh()
 
     async def _async_shutdown(self, event):
+        """Stop equipment when Home Assistant shuts down."""
         self._remove_shutdown = None
         await self.async_stop()
 
     async def async_stop(self) -> None:
+        """Stop owned equipment, save state and release subscriptions."""
         async with self._lock:
             self._stopped = True
             if self.actuator is not None:
@@ -153,47 +160,53 @@ class ZealDryController:
         self._remove_interval = None
 
     async def async_set_test_temperature(self, value: float) -> None:
+        """Change the simulated room temperature and reevaluate the controller."""
         self.test_temperature_c = value
         await self.async_refresh()
 
     async def async_set_test_humidity(self, value: float) -> None:
+        """Change the simulated humidity and reevaluate the controller."""
         self.test_humidity = value
         await self.async_refresh()
 
     @callback
     def _async_sensor_changed(self, event: Event) -> None:
+        """Schedule reevaluation when a configured room sensor changes."""
         self.hass.async_create_task(self.async_refresh())
 
     @callback
     def _async_periodic_tick(self, now: datetime) -> None:
+        """Reevaluate timers even when room readings have not changed."""
         self.hass.async_create_task(self.async_refresh())
 
     def _apply_settings(self):
-        s = self.settings
-        self.profile = s.profile
+        """Translate saved user settings into decision, timing and setpoint inputs."""
+        settings = self.settings
+        self.profile = settings.profile
         self.thresholds = replace(
             self.thresholds,
-            preferred_rh=s.preferred_rh,
-            maximum_rh=s.maximum_rh,
-            critical_rh=s.critical_rh,
-            high_rh_persistence=timedelta(minutes=s.persistence_minutes),
+            preferred_rh=settings.preferred_rh,
+            maximum_rh=settings.maximum_rh,
+            critical_rh=settings.critical_rh,
+            high_rh_persistence=timedelta(minutes=settings.persistence_minutes),
         )
         self.timing = TimingConfig(
-            timedelta(minutes=s.minimum_run_minutes),
-            timedelta(minutes=s.minimum_rest_minutes),
-            timedelta(minutes=s.recovery_minutes),
-            timedelta(minutes=s.maximum_run_minutes),
+            minimum_run=timedelta(minutes=settings.minimum_run_minutes),
+            minimum_rest=timedelta(minutes=settings.minimum_rest_minutes),
+            recovery_period=timedelta(minutes=settings.recovery_minutes),
+            maximum_run=timedelta(minutes=settings.maximum_run_minutes),
         )
         self.setpoint_config = replace(
             self.setpoint_config,
-            strategy=s.strategy,
-            fixed_target_c=s.fixed_target_c,
-            offset_c=s.offset_c,
-            minimum_c=s.minimum_c,
-            maximum_c=s.maximum_c,
+            strategy=settings.strategy,
+            fixed_target_c=settings.fixed_target_c,
+            offset_c=settings.offset_c,
+            minimum_c=settings.minimum_c,
+            maximum_c=settings.maximum_c,
         )
 
     async def async_update_settings(self, **changes):
+        """Validate and save a policy change before applying it to the running zone."""
         async with self._lock:
             updated = replace(self.settings, **changes)
             previous = self.settings
@@ -204,11 +217,13 @@ class ZealDryController:
                 self.settings = previous
                 raise
             self._apply_settings()
+            # A changed start threshold must earn a new persistence period.
             if any(key in changes for key in ("maximum_rh", "persistence_minutes")):
                 self.above_maximum_since = None
             await self._async_refresh()
 
     async def _save(self):
+        """Persist settings, timer history and responsibility for stopping the AC."""
         if self._store is not None:
             await self._store.async_save(
                 {
@@ -219,17 +234,22 @@ class ZealDryController:
                 }
             )
 
+    def _record_fault(self, now: datetime) -> None:
+        """Record the fault and stop time so recovery cannot bypass the rest timer."""
+        self.state_snapshot = replace(
+            self.state_snapshot,
+            state=ControllerState.FAULT,
+            reason=self.command_error,
+            drying_stopped_at=now,
+        )
+
     async def _safe_save(self):
+        """Latch a fault and request a stop if runtime state cannot be saved."""
         try:
             await self._save()
         except (OSError, HomeAssistantError):
             self.command_error = "storage_write_failed"
-            self.state_snapshot = replace(
-                self.state_snapshot,
-                state=ControllerState.FAULT,
-                reason=self.command_error,
-                drying_stopped_at=dt_util.utcnow(),
-            )
+            self._record_fault(dt_util.utcnow())
             if self.actuator is not None:
                 try:
                     await self.actuator.async_turn_off()
@@ -237,12 +257,23 @@ class ZealDryController:
                     pass
 
     async def async_refresh(self) -> None:
+        """Serialize evaluations so sensor events cannot overlap equipment commands."""
         async with self._lock:
             if not self._stopped:
                 await self._async_refresh()
 
     async def _async_refresh(self) -> None:
+        """Evaluate inputs, enforce protections, command equipment, then publish."""
         now = dt_util.utcnow()
+        self._update_environment(now)
+        self._update_control_state(now)
+        await self._apply_equipment_request(now)
+        self.last_updated = now
+        for listener in tuple(self._listeners):
+            listener()
+
+    def _update_environment(self, now: datetime) -> None:
+        """Validate room readings and maintain the high-humidity persistence timer."""
         try:
             if self.control_mode == CONTROL_MODE_DUMMY:
                 temperature_c = self.test_temperature_c
@@ -285,6 +316,8 @@ class ZealDryController:
             self.above_maximum_since = None
             self.decision = evaluate_moisture(None, self.thresholds)
 
+    def _update_control_state(self, now: datetime) -> None:
+        """Apply timing protections and latch equipment or feedback faults."""
         if isinstance(self.actuator, ClimateAdapter):
             try:
                 self.actuator.inspect()
@@ -301,12 +334,8 @@ class ZealDryController:
             inhibited=self.profile == "off",
         )
         if self.command_error and self.profile != "off":
-            self.state_snapshot = replace(
-                self.state_snapshot,
-                state=ControllerState.FAULT,
-                reason=self.command_error,
-                drying_stopped_at=now,
-            )
+            self._record_fault(now)
+        # Allow one minute for device feedback before treating a mode mismatch as a fault.
         if (
             isinstance(self.actuator, ClimateAdapter)
             and self.actuator.owned
@@ -321,12 +350,10 @@ class ZealDryController:
                 and now - self.actuator.requested_at >= timedelta(minutes=1)
             ):
                 self.command_error = "climate_mode_changed"
-                self.state_snapshot = replace(
-                    self.state_snapshot,
-                    state=ControllerState.FAULT,
-                    reason=self.command_error,
-                    drying_stopped_at=now,
-                )
+                self._record_fault(now)
+
+    async def _apply_equipment_request(self, now: datetime) -> None:
+        """Save intent before commanding equipment; stop safely if a request fails."""
         # Persist intent before services, so interrupted starts are stopped on restart.
         if (
             isinstance(self.actuator, ClimateAdapter)
@@ -349,23 +376,16 @@ class ZealDryController:
                     await self.actuator.async_turn_off()
             except (HomeAssistantError, TimeoutError) as err:
                 self.command_error = str(err) or "command_failed"
-                self.state_snapshot = replace(
-                    self.state_snapshot,
-                    state=ControllerState.FAULT,
-                    reason=self.command_error,
-                    drying_stopped_at=now,
-                )
+                self._record_fault(now)
                 try:
                     await self.actuator.async_turn_off()
                 except (HomeAssistantError, TimeoutError):
                     pass  # Ownership remains set; subsequent ticks retry stopping.
         await self._safe_save()
-        self.last_updated = now
-        for listener in tuple(self._listeners):
-            listener()
 
     @staticmethod
     def _numeric_state(state: State | None, label: str) -> float:
+        """Reject missing, stale or nonnumeric sensor readings."""
         if state is None:
             raise EnvironmentalInputError(f"{label} entity is missing")
         if dt_util.utcnow() - state.last_reported > timedelta(minutes=30):
@@ -379,6 +399,7 @@ class ZealDryController:
 
     @classmethod
     def _temperature_c(cls, state: State | None) -> float:
+        """Convert a validated temperature reading to Celsius."""
         value = cls._numeric_state(state, "temperature")
         if state is None:
             raise EnvironmentalInputError("temperature entity is missing")

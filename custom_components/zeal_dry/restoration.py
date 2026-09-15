@@ -7,6 +7,7 @@ from .state_machine import ControllerState, StateSnapshot
 
 
 def serialize(snapshot):
+    """Convert state timestamps to strings for persistent storage."""
     return {
         key: value.isoformat() if isinstance(value, datetime) else value
         for key, value in asdict(snapshot).items()
