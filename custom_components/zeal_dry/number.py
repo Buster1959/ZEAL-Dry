@@ -6,20 +6,52 @@ from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_CONTROL_MODE, CONTROL_MODE_DUMMY, DATA_CONTROLLERS, DOMAIN
 from .entity import ZealDryEntity
+from .settings import NUMBER_SETTINGS
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback) -> None:
-    if entry.data.get(CONF_CONTROL_MODE) != CONTROL_MODE_DUMMY:
-        return
+async def async_setup_entry(
+    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
     controller = hass.data[DOMAIN][DATA_CONTROLLERS][entry.entry_id]
-    async_add_entities([
-        ZealDryTestTemperature(entry, controller),
-        ZealDryTestHumidity(entry, controller),
-    ])
+    entities = [ZealDrySettingNumber(entry, controller, key) for key in NUMBER_SETTINGS]
+    if entry.data.get(CONF_CONTROL_MODE) == CONTROL_MODE_DUMMY:
+        entities.extend(
+            [
+                ZealDryTestTemperature(entry, controller),
+                ZealDryTestHumidity(entry, controller),
+            ]
+        )
+    async_add_entities(entities)
+
+
+class ZealDrySettingNumber(ZealDryEntity, NumberEntity):
+    _attr_mode = NumberMode.BOX
+
+    def __init__(self, entry, controller, key):
+        super().__init__(entry, controller, key)
+        self.key = key
+        (
+            self._attr_name,
+            self._attr_native_min_value,
+            self._attr_native_max_value,
+            self._attr_native_step,
+            self._attr_native_unit_of_measurement,
+        ) = NUMBER_SETTINGS[key]
+
+    @property
+    def native_value(self):
+        return getattr(self.controller.settings, self.key)
+
+    async def async_set_native_value(self, value):
+        try:
+            await self.controller.async_update_settings(**{self.key: value})
+        except ValueError as err:
+            raise HomeAssistantError(str(err)) from err
 
 
 class ZealDryTestTemperature(ZealDryEntity, NumberEntity):

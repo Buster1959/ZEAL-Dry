@@ -57,7 +57,9 @@ def next_state(
 ) -> StateSnapshot:
     """Return the next deterministic controller state."""
     if inhibited:
-        return _change(snapshot, ControllerState.INHIBITED, now, "automatic_control_inhibited")
+        return _change(
+            snapshot, ControllerState.INHIBITED, now, "automatic_control_inhibited"
+        )
 
     if decision.risk is MoistureRisk.UNKNOWN:
         return _change(snapshot, ControllerState.FAULT, now, decision.reason)
@@ -109,11 +111,21 @@ def next_state(
 
     if decision.demand:
         if not action_permitted:
-            return _change(snapshot, ControllerState.MONITORING, now, "drying_required_control_not_enabled")
+            return _change(
+                snapshot,
+                ControllerState.MONITORING,
+                now,
+                "drying_required_control_not_enabled",
+            )
 
         if snapshot.drying_stopped_at is not None:
             if now - snapshot.drying_stopped_at < timing.minimum_rest:
-                return _change(snapshot, ControllerState.MONITORING, now, "minimum_rest_time_active")
+                return _change(
+                    snapshot,
+                    ControllerState.MONITORING,
+                    now,
+                    "minimum_rest_time_active",
+                )
 
         return StateSnapshot(
             state=ControllerState.DRYING,
@@ -140,6 +152,11 @@ def _change(
         state=state,
         entered_at=snapshot.entered_at if snapshot.state is state else now,
         drying_started_at=snapshot.drying_started_at,
-        drying_stopped_at=(now if snapshot.state is ControllerState.DRYING and state is not ControllerState.DRYING else snapshot.drying_stopped_at),
+        drying_stopped_at=(
+            now
+            if snapshot.state is ControllerState.DRYING
+            and state is not ControllerState.DRYING
+            else snapshot.drying_stopped_at
+        ),
         reason=reason,
     )

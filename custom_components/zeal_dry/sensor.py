@@ -11,10 +11,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util.unit_conversion import TemperatureConverter
 
 from .const import DATA_CONTROLLERS, DOMAIN
 from .controller import ZealDryController
 from .entity import ZealDryEntity
+from .hvac import ClimateAdapter
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -33,7 +35,8 @@ SENSORS = (
         state_class="measurement",
         value_fn=lambda c: (
             round(c.environmental_reading.temperature_c, 1)
-            if c.environmental_reading else None
+            if c.environmental_reading
+            else None
         ),
     ),
     ZealDrySensorDescription(
@@ -44,7 +47,8 @@ SENSORS = (
         state_class="measurement",
         value_fn=lambda c: (
             round(c.environmental_reading.relative_humidity, 1)
-            if c.environmental_reading else None
+            if c.environmental_reading
+            else None
         ),
     ),
     ZealDrySensorDescription(
@@ -55,7 +59,8 @@ SENSORS = (
         state_class="measurement",
         value_fn=lambda c: (
             round(c.environmental_reading.dew_point_c, 1)
-            if c.environmental_reading else None
+            if c.environmental_reading
+            else None
         ),
     ),
     ZealDrySensorDescription(
@@ -65,7 +70,8 @@ SENSORS = (
         state_class="measurement",
         value_fn=lambda c: (
             round(c.environmental_reading.dew_point_spread_c, 1)
-            if c.environmental_reading else None
+            if c.environmental_reading
+            else None
         ),
     ),
     ZealDrySensorDescription(
@@ -81,7 +87,7 @@ SENSORS = (
     ZealDrySensorDescription(
         key="decision_reason",
         name="Decision reason",
-        value_fn=lambda c: c.decision.reason if c.decision else c.input_error,
+        value_fn=lambda c: c.state_snapshot.reason,
     ),
     ZealDrySensorDescription(
         key="proposed_dry_target",
@@ -90,7 +96,8 @@ SENSORS = (
         device_class="temperature",
         value_fn=lambda c: (
             round(c.proposed_setpoint.applied_target_c, 1)
-            if c.proposed_setpoint else None
+            if c.proposed_setpoint
+            else None
         ),
     ),
     ZealDrySensorDescription(
@@ -104,7 +111,9 @@ SENSORS = (
         native_unit_of_measurement="min",
         state_class="measurement",
         value_fn=lambda c: (
-            round(c.actuator.runtime_minutes(), 1) if c.control_mode == "dummy_acu" and c.actuator is not None else None
+            round(c.actuator.runtime_minutes(), 1)
+            if c.control_mode == "dummy_acu" and c.actuator is not None
+            else None
         ),
     ),
 )
@@ -139,4 +148,43 @@ class ZealDrySensor(ZealDryEntity, SensorEntity):
     @property
     def native_value(self):
         """Return the current calculated/observed value."""
-        return self.entity_description.value_fn(self.controller)
+        c = self.controller
+        if self.entity_description.key == "proposed_dry_target" and isinstance(
+            c.actuator, ClimateAdapter
+        ):
+            command = c.actuator.last_command
+            if not command or command[0] != "dry" or command[1] is None:
+                return None
+            state = c.hass.states.get(c.climate_entity)
+            unit = (
+                state.attributes.get(
+                    "temperature_unit", c.hass.config.units.temperature_unit
+                )
+                if state
+                else c.hass.config.units.temperature_unit
+            )
+            return round(
+                TemperatureConverter.convert(
+                    command[1], unit, UnitOfTemperature.CELSIUS
+                ),
+                2,
+            )
+        return self.entity_description.value_fn(c)
+
+    @property
+    def extra_state_attributes(self):
+        if self.entity_description.key not in ("controller_state", "decision_reason"):
+            return None
+        c = self.controller
+        return {
+            "moisture_reason": c.decision.reason if c.decision else None,
+            "moisture_explanation": c.decision.explanation
+            if c.decision
+            else c.input_error,
+            "command_error": c.command_error,
+            "drying_started_at": c.state_snapshot.drying_started_at,
+            "drying_stopped_at": c.state_snapshot.drying_stopped_at,
+            "minimum_run_minutes": c.settings.minimum_run_minutes,
+            "minimum_rest_minutes": c.settings.minimum_rest_minutes,
+            "maximum_run_minutes": c.settings.maximum_run_minutes,
+        }

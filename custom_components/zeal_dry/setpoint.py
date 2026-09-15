@@ -3,19 +3,34 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import floor
+from math import floor, isfinite
 
 
 @dataclass(frozen=True, slots=True)
 class DrySetpointConfig:
     """Configuration for the room-relative Dry target strategy."""
 
+    strategy: str = "room_offset"
+    fixed_target_c: float = 18.0
     offset_c: float = 0.5
     minimum_c: float = 16.0
     maximum_c: float = 20.0
     step_c: float = 1.0
 
     def __post_init__(self) -> None:
+        if self.strategy not in ("room_offset", "fixed"):
+            raise ValueError("Unknown Dry strategy")
+        if not all(
+            isfinite(v)
+            for v in (
+                self.fixed_target_c,
+                self.offset_c,
+                self.minimum_c,
+                self.maximum_c,
+                self.step_c,
+            )
+        ):
+            raise ValueError("Dry setpoints must be finite")
         if self.minimum_c > self.maximum_c:
             raise ValueError("minimum Dry target cannot exceed maximum")
         if self.step_c <= 0:
@@ -39,7 +54,11 @@ def calculate_dry_setpoint(
 ) -> DrySetpointResult:
     """Calculate a room-relative Dry target, clamp it, then round to device step."""
     config = config or DrySetpointConfig()
-    raw = float(room_temperature_c) + config.offset_c
+    raw = (
+        config.fixed_target_c
+        if config.strategy == "fixed"
+        else float(room_temperature_c) + config.offset_c
+    )
     constrained = min(max(raw, config.minimum_c), config.maximum_c)
 
     steps = (constrained - config.minimum_c) / config.step_c

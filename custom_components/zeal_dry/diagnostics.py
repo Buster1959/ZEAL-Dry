@@ -16,6 +16,8 @@ async def async_get_config_entry_diagnostics(
 ) -> dict:
     """Return non-sensitive diagnostics for one ZEAL-Dry zone."""
     controller = hass.data.get(DOMAIN, {}).get(DATA_CONTROLLERS, {}).get(entry.entry_id)
+    if controller is None:
+        return {"controller_loaded": False}
     reading = getattr(controller, "environmental_reading", None)
     decision = getattr(controller, "decision", None)
     thresholds = getattr(controller, "thresholds", None)
@@ -89,6 +91,11 @@ async def async_get_config_entry_diagnostics(
             if getattr(controller, "last_updated", None) is not None
             else None
         ),
-        "block": 5,
-        "control_active": False,
+        "settings": controller.settings.as_dict(),
+        "command_error": controller.command_error,
+        "command_result": getattr(controller.actuator, "last_result", None),
+        "stop_pending": bool(getattr(controller.actuator, "owned", False)),
+        "block": 7,
+        "control_active": controller.control_mode == "climate"
+        and controller.state_snapshot.state.value == "drying",
     }

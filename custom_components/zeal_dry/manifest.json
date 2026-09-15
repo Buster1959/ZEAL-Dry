@@ -1,12 +1,14 @@
 {
   "domain": "zeal_dry",
   "name": "ZEAL-Dry",
-  "codeowners": ["@Buster1959"],
+  "codeowners": [
+    "@Buster1959"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/Buster1959/ZEAL-Dry",
   "integration_type": "hub",
   "issue_tracker": "https://github.com/Buster1959/ZEAL-Dry/issues",
   "iot_class": "local_push",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

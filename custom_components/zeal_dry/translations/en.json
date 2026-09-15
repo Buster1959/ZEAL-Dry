@@ -47,8 +47,20 @@
     "step": {
       "init": {
         "title": "ZEAL-Dry options",
-        "description": "Runtime tuning controls will be added here as the control modules are enabled."
+        "description": "Configure persistence, protection times and Dry temperature bounds. Changes are saved and applied to the controller. Live control observes a new rest period whenever the integration reloads.",
+        "data": {
+          "persistence_minutes": "High RH persistence (minutes)",
+          "minimum_run_minutes": "Minimum Dry runtime (minutes)",
+          "minimum_rest_minutes": "Minimum rest (minutes)",
+          "recovery_minutes": "Recovery observation (minutes)",
+          "maximum_run_minutes": "Maximum continuous runtime (minutes)",
+          "minimum_c": "Minimum Dry target (\u00b0C)",
+          "maximum_c": "Maximum Dry target (\u00b0C)"
+        }
       }
+    },
+    "error": {
+      "invalid_settings": "Check that minimum runtime and temperature do not exceed their maximum values."
     }
   }
 }

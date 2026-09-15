@@ -19,7 +19,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up ZEAL-Dry binary sensors."""
     controller = hass.data[DOMAIN][DATA_CONTROLLERS][entry.entry_id]
-    async_add_entities([ZealDryDemandSensor(entry, controller)])
+    async_add_entities(
+        [
+            ZealDryDemandSensor(entry, controller),
+            ZealDryFaultSensor(entry, controller),
+            ZealDryCondensationSensor(entry, controller),
+        ]
+    )
 
 
 class ZealDryDemandSensor(ZealDryEntity, BinarySensorEntity):
@@ -47,5 +53,51 @@ class ZealDryDemandSensor(ZealDryEntity, BinarySensorEntity):
         return {
             "risk": decision.risk.value if decision else "unknown",
             "reason": decision.reason if decision else "sensor_unavailable",
-            "explanation": decision.explanation if decision else self.controller.input_error,
+            "explanation": decision.explanation
+            if decision
+            else self.controller.input_error,
+        }
+
+
+class ZealDryFaultSensor(ZealDryEntity, BinarySensorEntity):
+    _attr_name = "Fault"
+    _attr_device_class = "problem"
+
+    def __init__(self, entry, controller):
+        super().__init__(entry, controller, "fault")
+
+    @property
+    def is_on(self):
+        return (
+            self.controller.state_snapshot.state.value == "fault"
+            or self.controller.command_error is not None
+        )
+
+    @property
+    def extra_state_attributes(self):
+        return {"reason": self.controller.command_error or self.controller.input_error}
+
+
+class ZealDryCondensationSensor(ZealDryEntity, BinarySensorEntity):
+    _attr_name = "Condensation risk"
+    _attr_icon = "mdi:water-alert"
+
+    def __init__(self, entry, controller):
+        super().__init__(entry, controller, "condensation_risk")
+
+    @property
+    def is_on(self):
+        reading = self.controller.environmental_reading
+        return (
+            reading.dew_point_spread_c <= self.controller.settings.safety_margin_c
+            if reading
+            else None
+        )
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "criterion": "room_temperature_minus_dew_point",
+            "safety_margin_c": self.controller.settings.safety_margin_c,
+            "explanation": "Air close to saturation; surface temperatures are not measured.",
         }

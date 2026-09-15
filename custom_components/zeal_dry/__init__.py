@@ -7,8 +7,8 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .const import (
-    CONF_CONTROL_MODE,
     CONF_CLIMATE_ENTITY,
+    CONF_CONTROL_MODE,
     CONF_HUMIDITY_ENTITY,
     CONF_TEMPERATURE_ENTITY,
     CONF_ZONE_NAME,
@@ -18,7 +18,13 @@ from .const import (
 )
 from .controller import ZealDryController
 
-PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH, Platform.NUMBER]
+PLATFORMS = [
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.SELECT,
+]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:

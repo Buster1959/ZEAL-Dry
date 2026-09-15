@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import pytest
 
-from custom_components.zeal_dry.setpoint import DrySetpointConfig, calculate_dry_setpoint
+from custom_components.zeal_dry.setpoint import (
+    DrySetpointConfig,
+    calculate_dry_setpoint,
+)
 
 
 def test_room_relative_target():

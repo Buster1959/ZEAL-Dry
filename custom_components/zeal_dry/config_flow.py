@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
-    CONF_CONTROL_MODE,
     CONF_CLIMATE_ENTITY,
-    CONTROL_MODE_CLIMATE,
+    CONF_CONTROL_MODE,
     CONF_HUMIDITY_ENTITY,
     CONF_TEMPERATURE_ENTITY,
     CONF_ZONE_NAME,
+    CONTROL_MODE_CLIMATE,
     CONTROL_MODE_DUMMY,
     CONTROL_MODE_MONITOR,
     DEFAULT_CONTROL_MODE,
@@ -48,10 +47,15 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(
             {
                 vol.Required(CONF_ZONE_NAME): selector.TextSelector(),
-                vol.Required(CONF_CONTROL_MODE, default=DEFAULT_CONTROL_MODE): selector.SelectSelector(
+                vol.Required(
+                    CONF_CONTROL_MODE, default=DEFAULT_CONTROL_MODE
+                ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=[
-                            {"value": CONTROL_MODE_CLIMATE, "label": "Live climate control"},
+                            {
+                                "value": CONTROL_MODE_CLIMATE,
+                                "label": "Live climate control",
+                            },
                             {"value": CONTROL_MODE_MONITOR, "label": "Monitoring only"},
                             {"value": CONTROL_MODE_DUMMY, "label": "Test / Dummy ACU"},
                         ],
@@ -84,10 +88,14 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         schema = vol.Schema(
             {
                 vol.Required(CONF_TEMPERATURE_ENTITY): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+                    selector.EntitySelectorConfig(
+                        domain="sensor", device_class="temperature"
+                    )
                 ),
                 vol.Required(CONF_HUMIDITY_ENTITY): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+                    selector.EntitySelectorConfig(
+                        domain="sensor", device_class="humidity"
+                    )
                 ),
             }
         )
@@ -100,8 +108,10 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_climate(self, user_input=None):
         errors = {}
         if user_input is not None:
-            from .hvac import ClimateAdapter
             from homeassistant.exceptions import HomeAssistantError
+
+            from .hvac import ClimateAdapter
+
             entity = user_input[CONF_CLIMATE_ENTITY]
             try:
                 if not entity.startswith("climate."):
@@ -112,9 +122,17 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 self._climate_entity = entity
                 return await self._async_create_zone(**self._sensors)
-        return self.async_show_form(step_id="climate", data_schema=vol.Schema({
-            vol.Required(CONF_CLIMATE_ENTITY): selector.EntitySelector(selector.EntitySelectorConfig(domain="climate"))
-        }), errors=errors)
+        return self.async_show_form(
+            step_id="climate",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_CLIMATE_ENTITY): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="climate")
+                    )
+                }
+            ),
+            errors=errors,
+        )
 
     async def async_step_dummy(self, user_input=None):
         """Confirm creation of the self-contained test bench."""
@@ -144,9 +162,31 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class ZealDryOptionsFlow(config_entries.OptionsFlow):
-    """Options-flow shell for later tuning controls."""
+    """Less frequently changed timing and target bounds."""
 
     async def async_step_init(self, user_input=None):
+        from .const import DATA_CONTROLLERS
+        from .settings import OPTION_SETTINGS
+
+        controller = self.hass.data[DOMAIN][DATA_CONTROLLERS][
+            self.config_entry.entry_id
+        ]
+        errors = {}
         if user_input is not None:
-            return self.async_create_entry(title="", data={})
-        return self.async_show_form(step_id="init", data_schema=vol.Schema({}))
+            try:
+                await controller.async_update_settings(**user_input)
+            except ValueError:
+                errors["base"] = "invalid_settings"
+            else:
+                return self.async_create_entry(
+                    title="", data=dict(self.config_entry.options)
+                )
+        schema = vol.Schema(
+            {
+                vol.Required(key, default=getattr(controller.settings, key)): vol.All(
+                    vol.Coerce(float), vol.Range(min=low, max=high)
+                )
+                for key, (low, high) in OPTION_SETTINGS.items()
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)
