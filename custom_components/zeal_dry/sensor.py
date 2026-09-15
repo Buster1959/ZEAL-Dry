@@ -104,7 +104,7 @@ SENSORS = (
         native_unit_of_measurement="min",
         state_class="measurement",
         value_fn=lambda c: (
-            round(c.actuator.runtime_minutes(), 1) if c.actuator is not None else None
+            round(c.actuator.runtime_minutes(), 1) if c.control_mode == "dummy_acu" and c.actuator is not None else None
         ),
     ),
 )

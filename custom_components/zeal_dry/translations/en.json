@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Add a ZEAL-Dry zone",
-        "description": "Choose Monitoring only for real room sensors, or Test / Dummy ACU for a completely self-contained test bench.",
+        "description": "Choose monitoring, the self-contained dummy test bench, or live climate control.",
         "data": {
           "zone_name": "Zone name",
           "control_mode": "Control mode"
@@ -24,12 +24,20 @@
       },
       "dummy": {
         "title": "Create ZEAL-Dry test bench",
-        "description": "This creates adjustable Test temperature and Test humidity controls and a built-in Dummy ACU. Start at 18 °C and 55% RH, then raise humidity to test moisture demand safely."
+        "description": "This creates adjustable Test temperature and Test humidity controls and a built-in Dummy ACU. Start at 18 \u00b0C and 55% RH, then raise humidity to test moisture demand safely."
+      },
+      "climate": {
+        "title": "Select Dry-capable AC",
+        "description": "This zone will control this AC automatically after a ten-minute startup rest. Use equipment dedicated to ZEAL-Dry; other climate automations must not control it concurrently.",
+        "data": {
+          "climate_entity": "Climate entity"
+        }
       }
     },
     "error": {
       "entity_not_found": "The selected entity is not currently available in Home Assistant.",
-      "zone_name_required": "Enter a name for this ZEAL-Dry zone."
+      "zone_name_required": "Enter a name for this ZEAL-Dry zone.",
+      "unsupported_climate": "Select an available climate entity supporting Dry and Off modes."
     },
     "abort": {
       "already_configured": "A ZEAL-Dry zone with this name is already configured."

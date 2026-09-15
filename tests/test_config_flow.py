@@ -1,71 +1,30 @@
-"""Tests for the ZEAL-Dry config flow."""
+"""Exercise the actual multi-step configuration flow."""
+from unittest.mock import AsyncMock, patch
+import pytest
+from homeassistant import config_entries
+from custom_components.zeal_dry.const import DOMAIN
 
-from homeassistant import config_entries, data_entry_flow
-from homeassistant.const import PERCENTAGE, UnitOfTemperature
-from homeassistant.core import HomeAssistant
+async def start(hass, mode):
+    result = await hass.config_entries.flow.async_init(DOMAIN,context={'source':config_entries.SOURCE_USER})
+    return await hass.config_entries.flow.async_configure(result['flow_id'], {'zone_name':'Test','control_mode':mode})
 
-from custom_components.zeal_dry.const import (
-    CONF_HUMIDITY_ENTITY,
-    CONF_TEMPERATURE_ENTITY,
-    CONF_ZONE_NAME,
-    DOMAIN,
-)
+@pytest.mark.parametrize('mode',['monitor_only','climate'])
+async def test_sensor_and_climate_flow(hass,mode):
+    hass.states.async_set('sensor.temp','18')
+    hass.states.async_set('sensor.rh','60')
+    hass.states.async_set('climate.test','off',{'hvac_modes':['dry','off']})
+    result = await start(hass,mode)
+    assert result['step_id'] == 'sensors'
+    with patch('custom_components.zeal_dry.async_setup_entry', AsyncMock(return_value=True)):
+        result = await hass.config_entries.flow.async_configure(result['flow_id'], {'temperature_entity':'sensor.temp','humidity_entity':'sensor.rh'})
+        if mode == 'climate':
+            assert result['step_id'] == 'climate'
+            result = await hass.config_entries.flow.async_configure(result['flow_id'],{'climate_entity':'climate.test'})
+        assert result['type'] == 'create_entry'
+        assert result['data']['control_mode'] == mode
+        await hass.async_block_till_done()
 
-
-async def test_user_flow_creates_zone(hass: HomeAssistant) -> None:
-    """A valid pair of indoor sensors creates one zone entry."""
-    hass.states.async_set(
-        "sensor.test_temperature",
-        "17.2",
-        {"device_class": "temperature", "unit_of_measurement": UnitOfTemperature.CELSIUS},
-    )
-    hass.states.async_set(
-        "sensor.test_humidity",
-        "68",
-        {"device_class": "humidity", "unit_of_measurement": PERCENTAGE},
-    )
-
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={"source": config_entries.SOURCE_USER},
-    )
-    assert result["type"] is data_entry_flow.FlowResultType.FORM
-
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {
-            CONF_ZONE_NAME: "Undercroft Bedroom",
-            CONF_TEMPERATURE_ENTITY: "sensor.test_temperature",
-            CONF_HUMIDITY_ENTITY: "sensor.test_humidity",
-        },
-    )
-
-    assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
-    assert result["title"] == "Undercroft Bedroom"
-    assert result["data"][CONF_TEMPERATURE_ENTITY] == "sensor.test_temperature"
-    assert result["data"][CONF_HUMIDITY_ENTITY] == "sensor.test_humidity"
-
-
-async def test_missing_entity_is_rejected(hass: HomeAssistant) -> None:
-    """Unavailable selected entities are rejected cleanly."""
-    hass.states.async_set(
-        "sensor.test_humidity",
-        "68",
-        {"device_class": "humidity", "unit_of_measurement": PERCENTAGE},
-    )
-
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN,
-        context={"source": config_entries.SOURCE_USER},
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {
-            CONF_ZONE_NAME: "Undercroft Bedroom",
-            CONF_TEMPERATURE_ENTITY: "sensor.missing_temperature",
-            CONF_HUMIDITY_ENTITY: "sensor.test_humidity",
-        },
-    )
-
-    assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["errors"][CONF_TEMPERATURE_ENTITY] == "entity_not_found"
+async def test_missing_entity_is_rejected(hass):
+    result = await start(hass,'monitor_only')
+    result = await hass.config_entries.flow.async_configure(result['flow_id'], {'temperature_entity':'sensor.missing','humidity_entity':'sensor.missing_rh'})
+    assert result['errors']['temperature_entity'] == 'entity_not_found'

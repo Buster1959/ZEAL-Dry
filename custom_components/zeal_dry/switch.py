@@ -19,7 +19,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the built-in dummy ACU when test mode is selected."""
     controller = hass.data[DOMAIN][DATA_CONTROLLERS][entry.entry_id]
-    if controller.actuator is None:
+    if controller.control_mode != "dummy_acu" or controller.actuator is None:
         return
     async_add_entities([ZealDryDummyAcuSwitch(entry, controller)])
 

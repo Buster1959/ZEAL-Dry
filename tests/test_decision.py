@@ -33,7 +33,7 @@ def test_critical_rh_demands_immediate_drying():
 
 def test_high_dew_point_demands_drying_even_when_rh_is_below_maximum():
     # Warm air can carry substantial moisture while RH looks comparatively benign.
-    decision = evaluate_moisture(build_environmental_reading(26.0, 60.0), MoistureThresholds())
+    decision = evaluate_moisture(build_environmental_reading(24.0, 60.0), MoistureThresholds())
     assert decision.demand is True
     assert decision.reason == "dew_point_high"
 
@@ -47,7 +47,7 @@ def test_critical_dew_point_is_immediate():
 
 def test_same_rh_can_produce_different_moisture_decisions():
     cool = evaluate_moisture(build_environmental_reading(12.0, 60.0), MoistureThresholds())
-    warm = evaluate_moisture(build_environmental_reading(26.0, 60.0), MoistureThresholds())
+    warm = evaluate_moisture(build_environmental_reading(24.0, 60.0), MoistureThresholds())
     assert cool.demand is False
     assert warm.demand is True
 

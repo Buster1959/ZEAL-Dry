@@ -62,6 +62,9 @@ def next_state(
     if decision.risk is MoistureRisk.UNKNOWN:
         return _change(snapshot, ControllerState.FAULT, now, decision.reason)
 
+    if snapshot.state is ControllerState.DRYING and not action_permitted:
+        return _change(snapshot, ControllerState.FAULT, now, "equipment_unavailable")
+
     if snapshot.state is ControllerState.DRYING:
         if snapshot.drying_started_at is not None:
             runtime = now - snapshot.drying_started_at
@@ -82,7 +85,7 @@ def next_state(
                     reason="minimum_run_time_active",
                 )
 
-        if decision.demand:
+        if decision.demand or decision.risk is MoistureRisk.ELEVATED:
             return StateSnapshot(
                 state=ControllerState.DRYING,
                 entered_at=snapshot.entered_at,
@@ -137,6 +140,6 @@ def _change(
         state=state,
         entered_at=snapshot.entered_at if snapshot.state is state else now,
         drying_started_at=snapshot.drying_started_at,
-        drying_stopped_at=snapshot.drying_stopped_at,
+        drying_stopped_at=(now if snapshot.state is ControllerState.DRYING and state is not ControllerState.DRYING else snapshot.drying_stopped_at),
         reason=reason,
     )

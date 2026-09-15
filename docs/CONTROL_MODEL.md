@@ -331,3 +331,17 @@ These are empirical questions. V1 should collect evidence rather than pretend th
 ## 15. V1 Principle
 
 > ZEAL-Dry should take the smallest deterministic action justified by persistent moisture risk, protect the HVAC equipment from unnecessary cycling, and explain exactly why it acted.
+## Controlled prototype safety policy (Blocks 6–7)
+
+Live zones wait a full minimum rest period on every startup/reload, including
+missing or malformed timer history. Interrupted owned runs are stopped before
+new work. Service intent and ownership are saved before starting equipment.
+Faults and inhibition record a stop time; elevated conditions retain an existing
+run until both preferred targets are recovered (subject to maximum runtime).
+Inputs not reported for 30 minutes are rejected. A service/equipment fault latches
+until integration reload; pending stops continue to be retried each minute.
+Select equipment dedicated to this controller; competing automations are unsupported.
+An unexpected mode change during an owned run latches a fault and requests Off.
+The adapter requires Dry and Off support, and sends temperature only when the
+climate entity advertises target-temperature support. Configured limits are
+intersected with the device grid in its own temperature units.

@@ -10,6 +10,8 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_CONTROL_MODE,
+    CONF_CLIMATE_ENTITY,
+    CONTROL_MODE_CLIMATE,
     CONF_HUMIDITY_ENTITY,
     CONF_TEMPERATURE_ENTITY,
     CONF_ZONE_NAME,
@@ -49,6 +51,7 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_CONTROL_MODE, default=DEFAULT_CONTROL_MODE): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=[
+                            {"value": CONTROL_MODE_CLIMATE, "label": "Live climate control"},
                             {"value": CONTROL_MODE_MONITOR, "label": "Monitoring only"},
                             {"value": CONTROL_MODE_DUMMY, "label": "Test / Dummy ACU"},
                         ],
@@ -69,6 +72,9 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors[CONF_TEMPERATURE_ENTITY] = "entity_not_found"
             if self.hass.states.get(humidity_entity) is None:
                 errors[CONF_HUMIDITY_ENTITY] = "entity_not_found"
+            if not errors and self._control_mode == CONTROL_MODE_CLIMATE:
+                self._sensors = user_input
+                return await self.async_step_climate()
             if not errors:
                 return await self._async_create_zone(
                     temperature_entity=temperature_entity,
@@ -91,6 +97,25 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_climate(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            from .hvac import ClimateAdapter
+            from homeassistant.exceptions import HomeAssistantError
+            entity = user_input[CONF_CLIMATE_ENTITY]
+            try:
+                if not entity.startswith("climate."):
+                    raise HomeAssistantError("invalid_climate_entity")
+                ClimateAdapter(self.hass, entity).inspect()
+            except HomeAssistantError:
+                errors[CONF_CLIMATE_ENTITY] = "unsupported_climate"
+            else:
+                self._climate_entity = entity
+                return await self._async_create_zone(**self._sensors)
+        return self.async_show_form(step_id="climate", data_schema=vol.Schema({
+            vol.Required(CONF_CLIMATE_ENTITY): selector.EntitySelector(selector.EntitySelectorConfig(domain="climate"))
+        }), errors=errors)
+
     async def async_step_dummy(self, user_input=None):
         """Confirm creation of the self-contained test bench."""
         if user_input is not None:
@@ -104,6 +129,8 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_ZONE_NAME: self._zone_name,
             CONF_CONTROL_MODE: self._control_mode,
         }
+        if self._control_mode == CONTROL_MODE_CLIMATE:
+            data[CONF_CLIMATE_ENTITY] = self._climate_entity
         if temperature_entity is not None:
             data[CONF_TEMPERATURE_ENTITY] = temperature_entity
         if humidity_entity is not None:
