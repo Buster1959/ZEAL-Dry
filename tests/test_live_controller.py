@@ -227,3 +227,32 @@ async def test_live_cycle_controls_multiple_acus(hass):
     await controller.async_stop()
     assert hass.states.get("climate.east").state == "off"
     assert hass.states.get("climate.west").state == "off"
+
+
+async def test_transient_equipment_unavailable_fault_recovers(hass):
+    """Clear an availability fault after the selected ACU reports normally again."""
+    hass.states.async_set("sensor.t", "25")
+    hass.states.async_set("sensor.h", "80")
+    hass.states.async_set("climate.ac", "unavailable")
+    controller = ZealDryController(
+        hass,
+        "recovery",
+        "Recovery",
+        temperature_entity="sensor.t",
+        humidity_entity="sensor.h",
+        climate_entity="climate.ac",
+        control_mode="climate",
+    )
+    await controller.async_start()
+    assert controller.command_error == "equipment_unavailable"
+    assert controller.state_snapshot.state == "fault"
+
+    hass.states.async_set(
+        "climate.ac",
+        "off",
+        {"hvac_modes": ["off", "dry"], "min_temp": 16, "max_temp": 30},
+    )
+    await controller.async_refresh()
+    assert controller.command_error is None
+    assert controller.state_snapshot.state != "fault"
+    await controller.async_stop()

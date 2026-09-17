@@ -33,6 +33,15 @@
           "climate_entity": "Climate entity",
           "climate_entities": "Climate entities"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure ZEAL-Dry zone",
+        "description": "Select the indoor sensors and all Dry-capable ACUs controlled by this zone.",
+        "data": {
+          "temperature_entity": "Indoor temperature sensor",
+          "humidity_entity": "Indoor humidity sensor",
+          "climate_entities": "Climate entities"
+        }
       }
     },
     "error": {
@@ -41,7 +50,9 @@
       "unsupported_climate": "Select an available climate entity supporting Dry and Off modes."
     },
     "abort": {
-      "already_configured": "A ZEAL-Dry zone with this name is already configured."
+      "already_configured": "A ZEAL-Dry zone with this name is already configured.",
+      "reconfigure_successful": "ZEAL-Dry zone updated.",
+      "dummy_reconfigure_not_supported": "Dummy test zones do not have external sensors or ACUs to reconfigure."
     }
   },
   "options": {

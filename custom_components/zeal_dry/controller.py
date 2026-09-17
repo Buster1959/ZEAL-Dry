@@ -44,6 +44,11 @@ from .settings import ZoneSettings
 from .state_machine import ControllerState, StateSnapshot, TimingConfig, next_state
 
 EVALUATION_INTERVAL = timedelta(minutes=1)
+RECOVERABLE_EQUIPMENT_ERRORS = {
+    "equipment_unavailable",
+    "dry_mode_unsupported",
+    "off_mode_unsupported",
+}
 
 
 @dataclass(slots=True)
@@ -345,6 +350,11 @@ class ZealDryController:
                 self.actuator.inspect()
             except HomeAssistantError as err:
                 self.command_error = str(err)
+            else:
+                # Availability and capability faults may be transient. Clear only
+                # errors produced by inspection; command and storage faults stay latched.
+                if self.command_error in RECOVERABLE_EQUIPMENT_ERRORS:
+                    self.command_error = None
         self.state_snapshot = next_state(
             self.state_snapshot,
             self.decision,

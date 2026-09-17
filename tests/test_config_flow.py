@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant import config_entries
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.zeal_dry.const import DOMAIN
 
@@ -78,3 +79,46 @@ async def test_live_flow_accepts_multiple_climate_entities(hass):
         "climate.east",
         "climate.west",
     ]
+
+
+async def test_reconfigure_migrates_legacy_climate_and_accepts_multiple(hass):
+    """Replace the legacy single ACU field when an existing zone is reconfigured."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Legacy",
+        unique_id="legacy",
+        data={
+            "zone_name": "Legacy",
+            "control_mode": "climate",
+            "temperature_entity": "sensor.old_temp",
+            "humidity_entity": "sensor.old_rh",
+            "climate_entity": "climate.old",
+        },
+    )
+    entry.add_to_hass(hass)
+    hass.states.async_set("sensor.temp", "18")
+    hass.states.async_set("sensor.rh", "60")
+    for entity_id in ("climate.east", "climate.west"):
+        hass.states.async_set(entity_id, "off", {"hvac_modes": ["dry", "off"]})
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={
+            "source": config_entries.SOURCE_RECONFIGURE,
+            "entry_id": entry.entry_id,
+        },
+    )
+    assert result["step_id"] == "reconfigure"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "temperature_entity": "sensor.temp",
+            "humidity_entity": "sensor.rh",
+            "climate_entities": ["climate.east", "climate.west"],
+        },
+    )
+    assert result["type"] == "abort"
+    assert result["reason"] == "reconfigure_successful"
+    assert "climate_entity" not in entry.data
+    assert entry.data["climate_entities"] == ["climate.east", "climate.west"]
+    await hass.async_block_till_done()

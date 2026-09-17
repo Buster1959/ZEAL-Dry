@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util.unit_conversion import TemperatureConverter
 
 from .const import DATA_CONTROLLERS, DOMAIN
@@ -128,6 +129,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up ZEAL-Dry monitoring sensors."""
     controller = hass.data[DOMAIN][DATA_CONTROLLERS][entry.entry_id]
+    if controller.control_mode != "dummy_acu":
+        registry = er.async_get(hass)
+        obsolete_entity_id = registry.async_get_entity_id(
+            "sensor", DOMAIN, f"{entry.entry_id}_dummy_acu_runtime"
+        )
+        if obsolete_entity_id is not None:
+            registry.async_remove(obsolete_entity_id)
     descriptions = (
         SENSORS
         if controller.control_mode == "dummy_acu"

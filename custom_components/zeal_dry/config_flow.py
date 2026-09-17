@@ -68,6 +68,71 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
         return self.add_suggested_values_to_schema(schema, suggested)
 
+    async def async_step_reconfigure(self, user_input=None):
+        """Update sensors and ACUs for an existing non-dummy zone."""
+        from homeassistant.exceptions import HomeAssistantError
+
+        from .hvac import ClimateAdapter
+
+        entry = self._get_reconfigure_entry()
+        control_mode = entry.data.get(CONF_CONTROL_MODE, DEFAULT_CONTROL_MODE)
+        if control_mode == CONTROL_MODE_DUMMY:
+            return self.async_abort(reason="dummy_reconfigure_not_supported")
+
+        current_climates = entry.data.get(CONF_CLIMATE_ENTITIES)
+        if current_climates is None and entry.data.get(CONF_CLIMATE_ENTITY):
+            current_climates = [entry.data[CONF_CLIMATE_ENTITY]]
+        schema_fields = {
+            vol.Required(
+                CONF_TEMPERATURE_ENTITY,
+                default=entry.data.get(CONF_TEMPERATURE_ENTITY),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(
+                    domain="sensor", device_class="temperature"
+                )
+            ),
+            vol.Required(
+                CONF_HUMIDITY_ENTITY,
+                default=entry.data.get(CONF_HUMIDITY_ENTITY),
+            ): selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
+            ),
+        }
+        if control_mode == CONTROL_MODE_CLIMATE:
+            schema_fields[
+                vol.Required(CONF_CLIMATE_ENTITIES, default=current_climates or [])
+            ] = selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="climate", multiple=True)
+            )
+
+        errors = {}
+        if user_input is not None:
+            for key in (CONF_TEMPERATURE_ENTITY, CONF_HUMIDITY_ENTITY):
+                if self.hass.states.get(user_input[key]) is None:
+                    errors[key] = "entity_not_found"
+            if control_mode == CONTROL_MODE_CLIMATE:
+                try:
+                    if not user_input[CONF_CLIMATE_ENTITIES]:
+                        raise HomeAssistantError("climate_entity_required")
+                    for entity_id in user_input[CONF_CLIMATE_ENTITIES]:
+                        ClimateAdapter(self.hass, entity_id).inspect()
+                except HomeAssistantError:
+                    errors[CONF_CLIMATE_ENTITIES] = "unsupported_climate"
+            if not errors:
+                updated_data = dict(entry.data)
+                updated_data.update(user_input)
+                updated_data.pop(CONF_CLIMATE_ENTITY, None)
+                self.hass.config_entries.async_update_entry(
+                    entry, data=updated_data
+                )
+                return self.async_abort(reason="reconfigure_successful")
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(schema_fields),
+            errors=errors,
+        )
+
     async def async_step_sensors(self, user_input=None):
         """Select real indoor sensors for monitoring mode."""
         errors: dict[str, str] = {}
