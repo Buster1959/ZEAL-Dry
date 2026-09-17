@@ -16,6 +16,7 @@ from .const import (
     CONF_HUMIDITY_ENTITY,
     CONF_SHOW_IN_SIDEBAR,
     CONF_TEMPERATURE_ENTITY,
+    CONF_WEATHER_ENTITY,
     DATA_CONTROLLERS,
     DOMAIN,
 )
@@ -61,6 +62,14 @@ def _remaining_seconds(controller) -> int | None:
     return max(0, int((deadline - now).total_seconds()))
 
 
+def _elapsed_seconds(controller) -> int | None:
+    """Return the current Dry run duration for the Overview banner."""
+    snapshot = controller.state_snapshot
+    if snapshot.state.value != "drying" or snapshot.drying_started_at is None:
+        return None
+    return max(0, int((dt_util.utcnow() - snapshot.drying_started_at).total_seconds()))
+
+
 def _status(controller) -> dict:
     """Build one stable, human-readable status contract for the panel."""
     snapshot = controller.state_snapshot
@@ -98,6 +107,7 @@ def _status(controller) -> dict:
         "detail": detail,
         "tone": tone,
         "remaining_seconds": remaining,
+        "elapsed_seconds": _elapsed_seconds(controller),
     }
 
 
@@ -106,6 +116,7 @@ def _catalog(hass: HomeAssistant) -> dict:
     temperature = []
     humidity = []
     climates = []
+    weather = []
     for state in hass.states.async_all():
         label = state.attributes.get("friendly_name", state.entity_id)
         item = {"entity_id": state.entity_id, "name": label, "state": state.state}
@@ -119,11 +130,14 @@ def _catalog(hass: HomeAssistant) -> dict:
             modes = state.attributes.get("hvac_modes", [])
             if "dry" in modes and "off" in modes:
                 climates.append(item)
+        elif state.domain == "weather":
+            weather.append(item)
     key = lambda item: (item["name"].casefold(), item["entity_id"])
     return {
         "temperature_sensors": sorted(temperature, key=key),
         "humidity_sensors": sorted(humidity, key=key),
         "climate_entities": sorted(climates, key=key),
+        "weather_entities": sorted(weather, key=key),
     }
 
 
@@ -139,6 +153,7 @@ def _configuration(hass: HomeAssistant, entry_id: str) -> dict:
             else []
         )
     reading = controller.environmental_reading
+    external = controller.external_environmental_reading
     decision = controller.decision
     return {
         "entry_id": entry_id,
@@ -156,6 +171,18 @@ def _configuration(hass: HomeAssistant, entry_id: str) -> dict:
             "humidity": reading.relative_humidity if reading else None,
             "dew_point_c": reading.dew_point_c if reading else None,
             "dew_point_spread_c": reading.dew_point_spread_c if reading else None,
+            "external": {
+                "entity_id": controller.weather_entity,
+                "temperature_c": external.temperature_c if external else None,
+                "humidity": external.relative_humidity if external else None,
+                "dew_point_c": external.dew_point_c if external else None,
+                "dew_point_difference_c": (
+                    reading.dew_point_c - external.dew_point_c
+                    if reading and external
+                    else None
+                ),
+                "error": controller.external_input_error,
+            },
             "proposed_target_c": (
                 controller.proposed_setpoint.applied_target_c
                 if controller.proposed_setpoint
@@ -180,6 +207,7 @@ def _configuration(hass: HomeAssistant, entry_id: str) -> dict:
             "show_in_sidebar": entry.options.get(CONF_SHOW_IN_SIDEBAR, True),
             "temperature_entity": entry.data.get(CONF_TEMPERATURE_ENTITY),
             "humidity_entity": entry.data.get(CONF_HUMIDITY_ENTITY),
+            "weather_entity": controller.weather_entity,
             "climate_entities": climates,
             "settings": controller.settings.as_dict(),
         },
@@ -244,6 +272,7 @@ _SETTING_SCHEMA = {
         vol.Required("entry_id"): str,
         vol.Required("temperature_entity"): str,
         vol.Required("humidity_entity"): str,
+        vol.Optional("weather_entity", default=""): str,
         vol.Required("climate_entities"): [str],
         vol.Required("show_in_sidebar"): bool,
         vol.Required("settings"): _SETTING_SCHEMA,
@@ -268,6 +297,11 @@ async def ws_save_setup(hass, connection, msg) -> None:
             raise ValueError("Select at least one ACU")
         for entity_id in msg["climate_entities"]:
             ClimateAdapter(hass, entity_id).inspect()
+        weather_entity = msg.get("weather_entity") or None
+        if weather_entity:
+            weather_state = hass.states.get(weather_entity)
+            if weather_state is None or weather_state.domain != "weather":
+                raise ValueError(f"{weather_entity} is not available")
         updated_settings = replace(controller.settings, **msg["settings"])
     except (HomeAssistantError, ValueError) as err:
         connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
@@ -282,6 +316,10 @@ async def ws_save_setup(hass, connection, msg) -> None:
             CONF_CLIMATE_ENTITIES: list(dict.fromkeys(msg["climate_entities"])),
         }
     )
+    if weather_entity:
+        data[CONF_WEATHER_ENTITY] = weather_entity
+    else:
+        data.pop(CONF_WEATHER_ENTITY, None)
     data.pop(CONF_CLIMATE_ENTITY, None)
     hass.config_entries.async_update_entry(
         entry,

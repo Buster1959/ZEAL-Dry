@@ -77,5 +77,7 @@ def test_frontend_has_focused_tabs_and_status_banner():
     for excluded in ("Schedule", "Learning"):
         assert excluded not in source
     assert "remaining_seconds" in source
+    assert "elapsed_seconds" in source
+    assert 'padStart(2, "0")' in source
     assert "Show ZEAL-Dry in the Home Assistant sidebar" in source
     assert "@media" in source

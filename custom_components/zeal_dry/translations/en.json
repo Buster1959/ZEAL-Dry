@@ -19,7 +19,8 @@
         "description": "Choose the real Home Assistant sensors ZEAL-Dry should monitor.",
         "data": {
           "temperature_entity": "Indoor temperature sensor",
-          "humidity_entity": "Indoor humidity sensor"
+          "humidity_entity": "Indoor humidity sensor",
+          "weather_entity": "External weather entity (optional)"
         }
       },
       "dummy": {
@@ -40,6 +41,7 @@
         "data": {
           "temperature_entity": "Indoor temperature sensor",
           "humidity_entity": "Indoor humidity sensor",
+          "weather_entity": "External weather entity (optional)",
           "climate_entities": "Climate entities"
         }
       }

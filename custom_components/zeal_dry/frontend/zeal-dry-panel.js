@@ -13,6 +13,8 @@ class ZealDryPanel extends HTMLElement {
     this._notice = "";
     this._error = "";
     this._timer = null;
+    this._statusReceivedAt = null;
+    this._lastRefreshAt = null;
     this.shadowRoot.addEventListener("click", (event) => this._onClick(event));
     this.shadowRoot.addEventListener("change", (event) => this._onChange(event));
   }
@@ -42,8 +44,12 @@ class ZealDryPanel extends HTMLElement {
   _startTimer() {
     if (this._timer) return;
     this._timer = window.setInterval(() => {
-      if (this._view === "overview" && !document.hidden) this._load(false);
-    }, 5000);
+      if (this._view !== "overview" || document.hidden) return;
+      this._render();
+      if (!this._lastRefreshAt || Date.now() - this._lastRefreshAt >= 5000) {
+        this._load(false);
+      }
+    }, 1000);
   }
 
   async _initialLoad() {
@@ -62,12 +68,14 @@ class ZealDryPanel extends HTMLElement {
 
   async _load(showSpinner = false) {
     if (!this._entryId || !this._hass) return;
+    this._lastRefreshAt = Date.now();
     if (showSpinner) this._loading = true;
     try {
       this._configuration = await this._hass.callWS({
         type: "zeal_dry/get_configuration",
         entry_id: this._entryId,
       });
+      this._statusReceivedAt = Date.now();
       this._error = "";
     } catch (error) {
       this._error = this._message(error, "Live ZEAL-Dry state could not be loaded.");
@@ -96,10 +104,27 @@ class ZealDryPanel extends HTMLElement {
 
   _countdown(seconds) {
     if (seconds === null || seconds === undefined) return "";
-    const safe = Math.max(0, Number(seconds));
+    const sinceUpdate = this._statusReceivedAt
+      ? Math.floor((Date.now() - this._statusReceivedAt) / 1000)
+      : 0;
+    const safe = Math.max(0, Math.floor(Number(seconds)) - sinceUpdate);
     const minutes = Math.floor(safe / 60);
     const remainder = safe % 60;
     return `${minutes}:${String(remainder).padStart(2, "0")} remaining`;
+  }
+
+  _duration(seconds) {
+    if (seconds === null || seconds === undefined) return "";
+    const sinceUpdate = this._statusReceivedAt
+      ? Math.floor((Date.now() - this._statusReceivedAt) / 1000)
+      : 0;
+    const safe = Math.max(0, Math.floor(Number(seconds)) + sinceUpdate);
+    const hours = Math.floor(safe / 3600);
+    const minutes = Math.floor((safe % 3600) / 60);
+    const remainder = safe % 60;
+    return [hours, minutes, remainder]
+      .map((part) => String(part).padStart(2, "0"))
+      .join(":");
   }
 
   _header() {
@@ -122,7 +147,10 @@ class ZealDryPanel extends HTMLElement {
     const config = this._configuration;
     const status = config.status;
     const state = config.controller;
+    const external = state.external;
     const countdown = this._countdown(status.remaining_seconds);
+    const elapsed = this._duration(status.elapsed_seconds);
+    const timer = elapsed || countdown;
     const acus = state.acus.length
       ? state.acus.map((acu) => `
           <div class="acu-row">
@@ -133,7 +161,7 @@ class ZealDryPanel extends HTMLElement {
     return `
       <section class="status ${this._escape(status.tone)}">
         <ha-icon icon="${status.tone === "fault" ? "mdi:alert-circle" : status.tone === "drying" ? "mdi:fan" : "mdi:shield-water"}"></ha-icon>
-        <div><h2>${this._escape(status.title)}${countdown ? ` — ${countdown}` : ""}</h2><p>${this._escape(status.detail)}</p></div>
+        <div><h2>${this._escape(status.title)}${timer ? ` — ${timer}` : ""}</h2><p>${this._escape(status.detail)}</p></div>
       </section>
       <div class="grid metrics">
         ${this._metric("Moisture risk", state.risk, "mdi:water-alert")}
@@ -146,6 +174,7 @@ class ZealDryPanel extends HTMLElement {
       <div class="grid two">
         <article><h3>Controller</h3><dl><dt>State</dt><dd>${this._escape(state.state)}</dd><dt>Decision</dt><dd>${this._escape(state.reason)}</dd><dt>Dry target</dt><dd>${this._number(state.proposed_target_c, " °C")}</dd><dt>Fault</dt><dd>${this._escape(state.fault || "None")}</dd></dl></article>
         <article><h3>Air-conditioning units</h3>${acus}</article>
+        <article><h3>External environment</h3>${external.entity_id ? `<dl><dt>Source</dt><dd>${this._escape(external.entity_id)}</dd><dt>Temperature</dt><dd>${this._number(external.temperature_c, " °C")}</dd><dt>Humidity</dt><dd>${this._number(external.humidity, "%")}</dd><dt>Dew point</dt><dd>${this._number(external.dew_point_c, " °C")}</dd><dt>Indoor minus outdoor DP</dt><dd>${this._number(external.dew_point_difference_c, " °C")}</dd></dl>${external.error ? `<p class="muted">${this._escape(external.error)}</p>` : ""}` : `<p class="muted">No external weather entity is configured.</p>`}</article>
       </div>`;
   }
 
@@ -178,10 +207,11 @@ class ZealDryPanel extends HTMLElement {
     return `
       <article class="wide setup">
         <h2>Zone setup</h2>
-        <p class="muted">Select the indoor readings and every Dry-capable ACU controlled by this moisture-protection zone.</p>
+        <p class="muted">Each zone uses one indoor temperature/humidity pair and controls one or more Dry-capable ACUs. Add another ZEAL-Dry integration entry for an independently measured zone.</p>
         <div class="form-grid">
           ${this._select("temperature_entity", "Indoor temperature sensor", catalog.temperature_sensors, setup.temperature_entity)}
           ${this._select("humidity_entity", "Indoor humidity sensor", catalog.humidity_sensors, setup.humidity_entity)}
+          ${this._optionalSelect("weather_entity", "External weather entity", catalog.weather_entities, setup.weather_entity)}
         </div>
         <label class="field"><span>Climate entities</span><select name="climate_entities" multiple size="${Math.min(6, Math.max(3, catalog.climate_entities.length))}">${catalog.climate_entities.map((item) => `<option value="${this._escape(item.entity_id)}" ${setup.climate_entities.includes(item.entity_id) ? "selected" : ""}>${this._escape(item.name)} · ${this._escape(item.entity_id)} · ${this._escape(item.state)}</option>`).join("")}</select><small>Use Ctrl/Cmd-click to select more than one ACU.</small></label>
         <h3>Moisture policy</h3>
@@ -211,6 +241,10 @@ class ZealDryPanel extends HTMLElement {
 
   _select(name, label, items, selected) {
     return `<label class="field"><span>${label}</span><select name="${name}">${items.map((item) => `<option value="${this._escape(item.entity_id)}" ${item.entity_id === selected ? "selected" : ""}>${this._escape(item.name)} · ${this._escape(item.entity_id)}</option>`).join("")}</select></label>`;
+  }
+
+  _optionalSelect(name, label, items, selected) {
+    return `<label class="field"><span>${label}</span><select name="${name}"><option value="">Not configured</option>${items.map((item) => `<option value="${this._escape(item.entity_id)}" ${item.entity_id === selected ? "selected" : ""}>${this._escape(item.name)} · ${this._escape(item.entity_id)}</option>`).join("")}</select><small>Used for outdoor comparison only; indoor readings control Dry demand.</small></label>`;
   }
 
   _input(name, label, value, unit, step = "1") {
@@ -261,6 +295,7 @@ class ZealDryPanel extends HTMLElement {
     const climate = [...root.querySelector('[name="climate_entities"]').selectedOptions].map((option) => option.value);
     const temperatureEntity = value("temperature_entity");
     const humidityEntity = value("humidity_entity");
+    const weatherEntity = value("weather_entity");
     const showInSidebar = root.querySelector('[name="show_in_sidebar"]').checked;
     this._saving = true;
     this._render();
@@ -270,6 +305,7 @@ class ZealDryPanel extends HTMLElement {
         entry_id: this._entryId,
         temperature_entity: temperatureEntity,
         humidity_entity: humidityEntity,
+        weather_entity: weatherEntity,
         climate_entities: climate,
         show_in_sidebar: showInSidebar,
         settings,

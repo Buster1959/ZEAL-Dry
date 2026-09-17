@@ -36,6 +36,7 @@ async def async_get_config_entry_diagnostics(
             "name": getattr(controller, "zone_name", None),
             "temperature_entity": getattr(controller, "temperature_entity", None),
             "humidity_entity": getattr(controller, "humidity_entity", None),
+            "weather_entity": getattr(controller, "weather_entity", None),
         },
         "environment": asdict(reading) if reading is not None else None,
         "decision": asdict(decision) if decision is not None else None,

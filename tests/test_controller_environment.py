@@ -55,3 +55,40 @@ async def test_unavailable_input_clears_reading(hass):
     assert controller.input_error == "humidity entity is unavailable"
 
     await controller.async_stop()
+
+
+async def test_weather_entity_adds_external_context_without_changing_demand(hass):
+    """Evaluate outdoor dew point separately from the indoor control reading."""
+    hass.states.async_set(
+        "sensor.room_temperature",
+        "24",
+        {"unit_of_measurement": UnitOfTemperature.CELSIUS},
+    )
+    hass.states.async_set("sensor.room_humidity", "70")
+    hass.states.async_set(
+        "weather.home",
+        "rainy",
+        {
+            "temperature": 22.4,
+            "temperature_unit": UnitOfTemperature.CELSIUS,
+            "humidity": 77,
+        },
+    )
+
+    controller = ZealDryController(
+        hass=hass,
+        entry_id="test",
+        zone_name="Test Zone",
+        temperature_entity="sensor.room_temperature",
+        humidity_entity="sensor.room_humidity",
+        weather_entity="weather.home",
+    )
+    await controller.async_start()
+
+    assert controller.decision.reason == "dew_point_critical"
+    assert controller.external_environmental_reading is not None
+    assert controller.external_environmental_reading.temperature_c == 22.4
+    assert controller.external_environmental_reading.relative_humidity == 77
+    assert controller.external_input_error is None
+
+    await controller.async_stop()

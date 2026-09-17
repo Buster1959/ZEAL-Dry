@@ -81,6 +81,30 @@ async def test_live_flow_accepts_multiple_climate_entities(hass):
     ]
 
 
+async def test_sole_weather_entity_is_saved_as_default_context(hass):
+    """Offer HA's unambiguous weather entity without requiring provider knowledge."""
+    hass.states.async_set("sensor.temp", "18")
+    hass.states.async_set("sensor.rh", "60")
+    hass.states.async_set(
+        "weather.home", "sunny", {"temperature": 20, "humidity": 50}
+    )
+    result = await start(hass, "monitor_only")
+    with patch(
+        "custom_components.zeal_dry.async_setup_entry", AsyncMock(return_value=True)
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {
+                "temperature_entity": "sensor.temp",
+                "humidity_entity": "sensor.rh",
+                "weather_entity": "weather.home",
+            },
+        )
+
+    assert result["type"] == "create_entry"
+    assert result["data"]["weather_entity"] == "weather.home"
+
+
 async def test_reconfigure_migrates_legacy_climate_and_accepts_multiple(hass):
     """Replace the legacy single ACU field when an existing zone is reconfigured."""
     entry = MockConfigEntry(

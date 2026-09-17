@@ -60,6 +60,7 @@ class ZealDryController:
     zone_name: str
     temperature_entity: str | None = None
     humidity_entity: str | None = None
+    weather_entity: str | None = None
     climate_entity: str | None = None
     climate_entities: list[str] | None = None
     control_mode: str = DEFAULT_CONTROL_MODE
@@ -75,6 +76,8 @@ class ZealDryController:
     test_temperature_c: float = DEFAULT_TEST_TEMPERATURE_C
     test_humidity: float = DEFAULT_TEST_HUMIDITY
     environmental_reading: EnvironmentalReading | None = None
+    external_environmental_reading: EnvironmentalReading | None = None
+    external_input_error: str | None = None
     decision: DryingDecision | None = None
     state_snapshot: StateSnapshot = field(default_factory=StateSnapshot)
     proposed_setpoint: DrySetpointResult | None = None
@@ -99,6 +102,10 @@ class ZealDryController:
             configured.insert(0, self.climate_entity)
         self.climate_entities = configured
         self.climate_entity = configured[0] if configured else None
+        if self.weather_entity is None:
+            weather_entities = self.hass.states.async_entity_ids("weather")
+            if len(weather_entities) == 1:
+                self.weather_entity = weather_entities[0]
 
     def add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
         """Register an entity update callback and return its unsubscribe function."""
@@ -142,9 +149,12 @@ class ZealDryController:
             if saved:
                 self.state_snapshot = restore(saved, dt_util.utcnow())
         elif self.temperature_entity and self.humidity_entity:
+            tracked_entities = [self.temperature_entity, self.humidity_entity]
+            if self.weather_entity:
+                tracked_entities.append(self.weather_entity)
             self._remove_listener = async_track_state_change_event(
                 self.hass,
-                [self.temperature_entity, self.humidity_entity],
+                tracked_entities,
                 self._async_sensor_changed,
             )
         # Sensor changes and periodic ticks both feed the same serialized update.
@@ -344,6 +354,33 @@ class ZealDryController:
             self.input_error = str(err)
             self.above_maximum_since = None
             self.decision = evaluate_moisture(None, self.thresholds)
+        self._update_external_environment()
+
+    def _update_external_environment(self) -> None:
+        """Read optional standard HA weather data without affecting indoor demand."""
+        self.external_environmental_reading = None
+        self.external_input_error = None
+        if not self.weather_entity:
+            return
+        try:
+            weather = self.hass.states.get(self.weather_entity)
+            if weather is None:
+                raise EnvironmentalInputError("weather entity is unavailable")
+            temperature = weather.attributes.get("temperature")
+            humidity = weather.attributes.get("humidity")
+            if temperature is None or humidity is None:
+                raise EnvironmentalInputError(
+                    "weather entity has no temperature or humidity"
+                )
+            unit = weather.attributes.get("temperature_unit", UnitOfTemperature.CELSIUS)
+            temperature_c = TemperatureConverter.convert(
+                float(temperature), unit, UnitOfTemperature.CELSIUS
+            )
+            self.external_environmental_reading = build_environmental_reading(
+                temperature_c, float(humidity)
+            )
+        except (EnvironmentalInputError, TypeError, ValueError) as err:
+            self.external_input_error = str(err)
 
     def _update_control_state(self, now: datetime) -> None:
         """Apply timing protections and latch equipment or feedback faults."""

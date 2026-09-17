@@ -14,6 +14,7 @@ from .const import (
     CONF_HUMIDITY_ENTITY,
     CONF_SHOW_IN_SIDEBAR,
     CONF_TEMPERATURE_ENTITY,
+    CONF_WEATHER_ENTITY,
     CONF_ZONE_NAME,
     CONTROL_MODE_CLIMATE,
     CONTROL_MODE_DUMMY,
@@ -27,6 +28,11 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for ZEAL-Dry."""
 
     VERSION = 1
+
+    def _default_weather_entity(self) -> str | None:
+        """Use HA's sole weather entity as the unambiguous default."""
+        entities = self.hass.states.async_entity_ids("weather")
+        return entities[0] if len(entities) == 1 else None
 
     async def async_step_user(self, user_input=None):
         """Choose the zone name and operating mode."""
@@ -83,6 +89,14 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         current_climates = entry.data.get(CONF_CLIMATE_ENTITIES)
         if current_climates is None and entry.data.get(CONF_CLIMATE_ENTITY):
             current_climates = [entry.data[CONF_CLIMATE_ENTITY]]
+        weather_default = (
+            entry.data.get(CONF_WEATHER_ENTITY) or self._default_weather_entity()
+        )
+        weather_key = (
+            vol.Optional(CONF_WEATHER_ENTITY, default=weather_default)
+            if weather_default
+            else vol.Optional(CONF_WEATHER_ENTITY)
+        )
         schema_fields = {
             vol.Required(
                 CONF_TEMPERATURE_ENTITY,
@@ -98,6 +112,9 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ): selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="sensor", device_class="humidity")
             ),
+            weather_key: selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="weather")
+            ),
         }
         if control_mode == CONTROL_MODE_CLIMATE:
             schema_fields[
@@ -111,6 +128,9 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             for key in (CONF_TEMPERATURE_ENTITY, CONF_HUMIDITY_ENTITY):
                 if self.hass.states.get(user_input[key]) is None:
                     errors[key] = "entity_not_found"
+            weather_entity = user_input.get(CONF_WEATHER_ENTITY)
+            if weather_entity and self.hass.states.get(weather_entity) is None:
+                errors[CONF_WEATHER_ENTITY] = "entity_not_found"
             if control_mode == CONTROL_MODE_CLIMATE:
                 try:
                     if not user_input[CONF_CLIMATE_ENTITIES]:
@@ -140,10 +160,13 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             temperature_entity = user_input[CONF_TEMPERATURE_ENTITY]
             humidity_entity = user_input[CONF_HUMIDITY_ENTITY]
+            weather_entity = user_input.get(CONF_WEATHER_ENTITY)
             if self.hass.states.get(temperature_entity) is None:
                 errors[CONF_TEMPERATURE_ENTITY] = "entity_not_found"
             if self.hass.states.get(humidity_entity) is None:
                 errors[CONF_HUMIDITY_ENTITY] = "entity_not_found"
+            if weather_entity and self.hass.states.get(weather_entity) is None:
+                errors[CONF_WEATHER_ENTITY] = "entity_not_found"
             if not errors and self._control_mode == CONTROL_MODE_CLIMATE:
                 self._sensors = user_input
                 return await self.async_step_climate()
@@ -151,8 +174,15 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self._async_create_zone(
                     temperature_entity=temperature_entity,
                     humidity_entity=humidity_entity,
+                    weather_entity=weather_entity,
                 )
 
+        weather_default = self._default_weather_entity()
+        weather_key = (
+            vol.Optional(CONF_WEATHER_ENTITY, default=weather_default)
+            if weather_default
+            else vol.Optional(CONF_WEATHER_ENTITY)
+        )
         schema = vol.Schema(
             {
                 vol.Required(CONF_TEMPERATURE_ENTITY): selector.EntitySelector(
@@ -164,6 +194,9 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     selector.EntitySelectorConfig(
                         domain="sensor", device_class="humidity"
                     )
+                ),
+                weather_key: selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="weather")
                 ),
             }
         )
@@ -212,7 +245,9 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self._async_create_zone()
         return self.async_show_form(step_id="dummy", data_schema=vol.Schema({}))
 
-    async def _async_create_zone(self, temperature_entity=None, humidity_entity=None):
+    async def _async_create_zone(
+        self, temperature_entity=None, humidity_entity=None, weather_entity=None
+    ):
         """Store a uniquely named zone and its selected entities."""
         await self.async_set_unique_id(self._zone_name.casefold())
         self._abort_if_unique_id_configured()
@@ -226,6 +261,8 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data[CONF_TEMPERATURE_ENTITY] = temperature_entity
         if humidity_entity is not None:
             data[CONF_HUMIDITY_ENTITY] = humidity_entity
+        if weather_entity is not None:
+            data[CONF_WEATHER_ENTITY] = weather_entity
         return self.async_create_entry(title=self._zone_name, data=data)
 
     @staticmethod

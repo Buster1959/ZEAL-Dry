@@ -5,11 +5,12 @@ DOMAIN = "zeal_dry"
 PANEL_COMPONENT = "zeal-dry-panel"
 PANEL_URL_PATH = "zeal-dry"
 PANEL_STATIC_URL = "/zeal_dry_static"
-PANEL_ASSET_VERSION = "1"
+PANEL_ASSET_VERSION = "2"
 
 CONF_ZONE_NAME = "zone_name"
 CONF_TEMPERATURE_ENTITY = "temperature_entity"
 CONF_HUMIDITY_ENTITY = "humidity_entity"
+CONF_WEATHER_ENTITY = "weather_entity"
 CONF_CONTROL_MODE = "control_mode"
 CONF_SHOW_IN_SIDEBAR = "show_in_sidebar"
 
