@@ -141,3 +141,69 @@ class ClimateAdapter:
         self.owned = False
         self.last_command = ("off", None)
         self.last_result = "off_requested"
+
+
+class ClimateGroupAdapter:
+    """Coordinate a zone's drying request across multiple climate entities."""
+
+    def __init__(self, adapters: list[ClimateAdapter]) -> None:
+        """Keep the individual adapters so ownership remains device-specific."""
+        if not adapters:
+            raise ValueError("at least one climate adapter is required")
+        self.adapters = adapters
+
+    @property
+    def available(self) -> bool:
+        """Require every configured ACU to be available before starting a run."""
+        return all(adapter.available for adapter in self.adapters)
+
+    @property
+    def owned(self) -> bool:
+        """Report whether this zone is responsible for stopping any ACU."""
+        return any(adapter.owned for adapter in self.adapters)
+
+    @owned.setter
+    def owned(self, value: bool) -> None:
+        """Mark every ACU owned before a coordinated start request."""
+        for adapter in self.adapters:
+            adapter.owned = value
+
+    @property
+    def last_command(self):
+        """Return the shared command when all ACUs agree."""
+        commands = {adapter.last_command for adapter in self.adapters}
+        return commands.pop() if len(commands) == 1 else None
+
+    @property
+    def last_result(self):
+        """Expose per-ACU command results for diagnostics."""
+        return {
+            adapter.entity_id: adapter.last_result for adapter in self.adapters
+        }
+
+    def inspect(self):
+        """Validate every ACU before the group is considered controllable."""
+        return {adapter.entity_id: adapter.inspect() for adapter in self.adapters}
+
+    async def async_dry(self, target_c, minimum_c, maximum_c):
+        """Request Dry mode on every ACU, stopping all if any request fails."""
+        try:
+            for adapter in self.adapters:
+                await adapter.async_dry(target_c, minimum_c, maximum_c)
+        except (HomeAssistantError, TimeoutError):
+            try:
+                await self.async_turn_off()
+            except (HomeAssistantError, TimeoutError):
+                pass
+            raise
+
+    async def async_turn_off(self):
+        """Attempt to stop every owned ACU even when one stop request fails."""
+        first_error = None
+        for adapter in self.adapters:
+            try:
+                await adapter.async_turn_off()
+            except (HomeAssistantError, TimeoutError) as err:
+                first_error = first_error or err
+        if first_error is not None:
+            raise first_error

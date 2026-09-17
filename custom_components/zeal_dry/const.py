@@ -17,4 +17,5 @@ DEFAULT_TEST_HUMIDITY = 55.0
 DATA_CONTROLLERS = "controllers"
 
 CONF_CLIMATE_ENTITY = "climate_entity"
+CONF_CLIMATE_ENTITIES = "climate_entities"
 CONTROL_MODE_CLIMATE = "climate"

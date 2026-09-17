@@ -30,7 +30,8 @@
         "title": "Select Dry-capable AC",
         "description": "This zone will control this AC automatically after a ten-minute startup rest. Use equipment dedicated to ZEAL-Dry; other climate automations must not control it concurrently.",
         "data": {
-          "climate_entity": "Climate entity"
+          "climate_entity": "Climate entity",
+          "climate_entities": "Climate entities"
         }
       }
     },

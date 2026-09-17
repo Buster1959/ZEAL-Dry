@@ -31,7 +31,7 @@ async def async_setup_entry(
 class ZealDryDemandSensor(ZealDryEntity, BinarySensorEntity):
     """Show whether ZEAL-Dry currently wants active drying."""
 
-    _attr_name = "Drying required"
+    _attr_name = "Moisture demand"
     _attr_icon = "mdi:water-alert"
 
     def __init__(self, entry: ConfigEntry, controller: ZealDryController) -> None:
@@ -57,6 +57,15 @@ class ZealDryDemandSensor(ZealDryEntity, BinarySensorEntity):
             "explanation": decision.explanation
             if decision
             else self.controller.input_error,
+            "controller_state": self.controller.state_snapshot.state.value,
+            "control_permitted": self.controller.profile != "off"
+            and self.controller.actuator is not None
+            and self.controller.actuator.available,
+            "inhibited_reason": (
+                self.controller.state_snapshot.reason
+                if self.controller.state_snapshot.state.value == "inhibited"
+                else None
+            ),
         }
 
 

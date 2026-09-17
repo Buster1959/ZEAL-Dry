@@ -9,6 +9,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_CLIMATE_ENTITY,
+    CONF_CLIMATE_ENTITIES,
     CONF_CONTROL_MODE,
     CONF_HUMIDITY_ENTITY,
     CONF_TEMPERATURE_ENTITY,
@@ -114,22 +115,25 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             from .hvac import ClimateAdapter
 
-            entity = user_input[CONF_CLIMATE_ENTITY]
+            entities = user_input[CONF_CLIMATE_ENTITIES]
             try:
-                if not entity.startswith("climate."):
-                    raise HomeAssistantError("invalid_climate_entity")
-                ClimateAdapter(self.hass, entity).inspect()
+                if not entities:
+                    raise HomeAssistantError("climate_entity_required")
+                for entity in entities:
+                    if not entity.startswith("climate."):
+                        raise HomeAssistantError("invalid_climate_entity")
+                    ClimateAdapter(self.hass, entity).inspect()
             except HomeAssistantError:
-                errors[CONF_CLIMATE_ENTITY] = "unsupported_climate"
+                errors[CONF_CLIMATE_ENTITIES] = "unsupported_climate"
             else:
-                self._climate_entity = entity
+                self._climate_entities = list(entities)
                 return await self._async_create_zone(**self._sensors)
         return self.async_show_form(
             step_id="climate",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_CLIMATE_ENTITY): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="climate")
+                    vol.Required(CONF_CLIMATE_ENTITIES): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="climate", multiple=True)
                     )
                 }
             ),
@@ -151,7 +155,7 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_CONTROL_MODE: self._control_mode,
         }
         if self._control_mode == CONTROL_MODE_CLIMATE:
-            data[CONF_CLIMATE_ENTITY] = self._climate_entity
+            data[CONF_CLIMATE_ENTITIES] = self._climate_entities
         if temperature_entity is not None:
             data[CONF_TEMPERATURE_ENTITY] = temperature_entity
         if humidity_entity is not None:

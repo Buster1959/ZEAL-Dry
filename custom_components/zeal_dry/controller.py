@@ -37,7 +37,7 @@ from .environment import (
     EnvironmentalReading,
     build_environmental_reading,
 )
-from .hvac import ClimateAdapter
+from .hvac import ClimateAdapter, ClimateGroupAdapter
 from .restoration import restore, serialize
 from .setpoint import DrySetpointConfig, DrySetpointResult, calculate_dry_setpoint
 from .settings import ZoneSettings
@@ -56,6 +56,7 @@ class ZealDryController:
     temperature_entity: str | None = None
     humidity_entity: str | None = None
     climate_entity: str | None = None
+    climate_entities: list[str] | None = None
     control_mode: str = DEFAULT_CONTROL_MODE
     command_error: str | None = None
     profile: str = "property_protection"
@@ -75,13 +76,23 @@ class ZealDryController:
     input_error: str | None = None
     last_updated: datetime | None = None
     above_maximum_since: datetime | None = None
-    actuator: DummyActuator | ClimateAdapter | None = field(default=None, init=False)
+    actuator: DummyActuator | ClimateAdapter | ClimateGroupAdapter | None = field(
+        default=None, init=False
+    )
     _remove_shutdown: object | None = field(default=None, init=False, repr=False)
     _remove_listener: object | None = field(default=None, init=False, repr=False)
     _remove_interval: object | None = field(default=None, init=False, repr=False)
     _listeners: set[Callable[[], None]] = field(
         default_factory=set, init=False, repr=False
     )
+
+    def __post_init__(self) -> None:
+        """Normalize legacy single-ACU entries into the multi-ACU representation."""
+        configured = list(self.climate_entities or [])
+        if self.climate_entity and self.climate_entity not in configured:
+            configured.insert(0, self.climate_entity)
+        self.climate_entities = configured
+        self.climate_entity = configured[0] if configured else None
 
     def add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
         """Register an entity update callback and return its unsubscribe function."""
@@ -104,16 +115,20 @@ class ZealDryController:
         # Interrupted live runs must stop and observe a fresh rest period.
         if self.control_mode == CONTROL_MODE_CLIMATE:
             self.state_snapshot = restore(saved, dt_util.utcnow())
-            observed = (
-                self.hass.states.get(self.climate_entity)
-                if self.climate_entity
-                else None
-            )
-            self.actuator = ClimateAdapter(
-                self.hass,
-                self.climate_entity,
-                owned=bool(saved.get("owned"))
-                or (observed is not None and observed.state == "dry"),
+            saved_owned = set(saved.get("owned_entities", []))
+            adapters = [
+                ClimateAdapter(
+                    self.hass,
+                    entity_id,
+                    owned=bool(saved.get("owned"))
+                    or entity_id in saved_owned
+                    or self.hass.states.get(entity_id) is not None
+                    and self.hass.states.get(entity_id).state == "dry",
+                )
+                for entity_id in self.climate_entities
+            ]
+            self.actuator = (
+                adapters[0] if len(adapters) == 1 else ClimateGroupAdapter(adapters)
             )
         if self.control_mode == CONTROL_MODE_DUMMY:
             self.actuator = DummyActuator()
@@ -229,8 +244,15 @@ class ZealDryController:
                 {
                     **serialize(self.state_snapshot),
                     "settings": self.settings.as_dict(),
-                    "owned": isinstance(self.actuator, ClimateAdapter)
+                    "owned": isinstance(
+                        self.actuator, (ClimateAdapter, ClimateGroupAdapter)
+                    )
                     and self.actuator.owned,
+                    "owned_entities": [
+                        adapter.entity_id
+                        for adapter in self._climate_adapters()
+                        if adapter.owned
+                    ],
                 }
             )
 
@@ -318,7 +340,7 @@ class ZealDryController:
 
     def _update_control_state(self, now: datetime) -> None:
         """Apply timing protections and latch equipment or feedback faults."""
-        if isinstance(self.actuator, ClimateAdapter):
+        if isinstance(self.actuator, (ClimateAdapter, ClimateGroupAdapter)):
             try:
                 self.actuator.inspect()
             except HomeAssistantError as err:
@@ -337,26 +359,28 @@ class ZealDryController:
             self._record_fault(now)
         # Allow one minute for device feedback before treating a mode mismatch as a fault.
         if (
-            isinstance(self.actuator, ClimateAdapter)
+            isinstance(self.actuator, (ClimateAdapter, ClimateGroupAdapter))
             and self.actuator.owned
-            and self.actuator.last_command
-            and self.actuator.last_command[0] == "dry"
         ):
-            observed = self.hass.states.get(self.climate_entity)
-            if (
-                observed is not None
-                and observed.state != "dry"
-                and self.actuator.requested_at is not None
-                and now - self.actuator.requested_at >= timedelta(minutes=1)
-            ):
-                self.command_error = "climate_mode_changed"
-                self._record_fault(now)
+            for adapter in self._climate_adapters():
+                observed = self.hass.states.get(adapter.entity_id)
+                if (
+                    adapter.last_command
+                    and adapter.last_command[0] == "dry"
+                    and observed is not None
+                    and observed.state != "dry"
+                    and adapter.requested_at is not None
+                    and now - adapter.requested_at >= timedelta(minutes=1)
+                ):
+                    self.command_error = f"climate_mode_changed:{adapter.entity_id}"
+                    self._record_fault(now)
+                    break
 
     async def _apply_equipment_request(self, now: datetime) -> None:
         """Save intent before commanding equipment; stop safely if a request fails."""
         # Persist intent before services, so interrupted starts are stopped on restart.
         if (
-            isinstance(self.actuator, ClimateAdapter)
+            isinstance(self.actuator, (ClimateAdapter, ClimateGroupAdapter))
             and self.state_snapshot.state is ControllerState.DRYING
         ):
             self.actuator.owned = True
@@ -364,7 +388,9 @@ class ZealDryController:
         if self.actuator is not None:
             try:
                 if self.state_snapshot.state is ControllerState.DRYING:
-                    if isinstance(self.actuator, ClimateAdapter):
+                    if isinstance(
+                        self.actuator, (ClimateAdapter, ClimateGroupAdapter)
+                    ):
                         await self.actuator.async_dry(
                             self.proposed_setpoint.raw_target_c,
                             self.setpoint_config.minimum_c,
@@ -382,6 +408,14 @@ class ZealDryController:
                 except (HomeAssistantError, TimeoutError):
                     pass  # Ownership remains set; subsequent ticks retry stopping.
         await self._safe_save()
+
+    def _climate_adapters(self) -> list[ClimateAdapter]:
+        """Return individual live adapters for ownership and feedback checks."""
+        if isinstance(self.actuator, ClimateGroupAdapter):
+            return self.actuator.adapters
+        if isinstance(self.actuator, ClimateAdapter):
+            return [self.actuator]
+        return []
 
     @staticmethod
     def _numeric_state(state: State | None, label: str) -> float:

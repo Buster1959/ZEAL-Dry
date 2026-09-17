@@ -175,3 +175,55 @@ async def test_live_cycle_through_home_assistant_services(hass):
     assert hass.states.get("climate.ac").state == "off"
     assert not c.actuator.owned
     await c.async_stop()
+
+
+async def test_live_cycle_controls_multiple_acus(hass):
+    """Start and stop every ACU selected for the same protected zone."""
+    from homeassistant.core import callback
+
+    attrs = {
+        "hvac_modes": ["off", "dry"],
+        "supported_features": 1,
+        "min_temp": 16,
+        "max_temp": 30,
+    }
+    hass.states.async_set("sensor.t", "25")
+    hass.states.async_set("sensor.h", "80")
+    for entity_id in ("climate.east", "climate.west"):
+        hass.states.async_set(entity_id, "off", attrs)
+    calls = []
+
+    @callback
+    def command(call):
+        calls.append((call.service, dict(call.data)))
+        if call.service == "set_hvac_mode":
+            hass.states.async_set(
+                call.data["entity_id"], call.data["hvac_mode"], attrs
+            )
+
+    hass.services.async_register("climate", "set_hvac_mode", command)
+    hass.services.async_register("climate", "set_temperature", command)
+    controller = ZealDryController(
+        hass,
+        "multi",
+        "Multi",
+        temperature_entity="sensor.t",
+        humidity_entity="sensor.h",
+        climate_entities=["climate.east", "climate.west"],
+        control_mode="climate",
+    )
+    await controller.async_start()
+    controller.state_snapshot = replace(
+        controller.state_snapshot,
+        drying_stopped_at=dt_util.utcnow() - timedelta(minutes=11),
+    )
+    await controller.async_refresh()
+    assert hass.states.get("climate.east").state == "dry"
+    assert hass.states.get("climate.west").state == "dry"
+    assert {data["entity_id"] for _, data in calls} == {
+        "climate.east",
+        "climate.west",
+    }
+    await controller.async_stop()
+    assert hass.states.get("climate.east").state == "off"
+    assert hass.states.get("climate.west").state == "off"

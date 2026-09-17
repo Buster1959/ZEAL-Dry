@@ -16,7 +16,6 @@ from homeassistant.util.unit_conversion import TemperatureConverter
 from .const import DATA_CONTROLLERS, DOMAIN
 from .controller import ZealDryController
 from .entity import ZealDryEntity
-from .hvac import ClimateAdapter
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -129,8 +128,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up ZEAL-Dry monitoring sensors."""
     controller = hass.data[DOMAIN][DATA_CONTROLLERS][entry.entry_id]
+    descriptions = (
+        SENSORS
+        if controller.control_mode == "dummy_acu"
+        else tuple(item for item in SENSORS if item.key != "dummy_acu_runtime")
+    )
     async_add_entities(
-        ZealDrySensor(entry, controller, description) for description in SENSORS
+        ZealDrySensor(entry, controller, description) for description in descriptions
     )
 
 
@@ -153,13 +157,15 @@ class ZealDrySensor(ZealDryEntity, SensorEntity):
     def native_value(self):
         """Return the current calculated/observed value."""
         controller = self.controller
-        if self.entity_description.key == "proposed_dry_target" and isinstance(
-            controller.actuator, ClimateAdapter
+        if (
+            self.entity_description.key == "proposed_dry_target"
+            and controller._climate_adapters()
         ):
-            command = controller.actuator.last_command
+            adapter = controller._climate_adapters()[0]
+            command = adapter.last_command
             if not command or command[0] != "dry" or command[1] is None:
                 return None
-            state = controller.hass.states.get(controller.climate_entity)
+            state = controller.hass.states.get(adapter.entity_id)
             unit = (
                 state.attributes.get(
                     "temperature_unit", controller.hass.config.units.temperature_unit
