@@ -352,4 +352,6 @@ class ZealDryPanel extends HTMLElement {
   }
 }
 
-customElements.define("zeal-dry-panel", ZealDryPanel);
+if (!customElements.get("zeal-dry-panel")) {
+  customElements.define("zeal-dry-panel", ZealDryPanel);
+}
