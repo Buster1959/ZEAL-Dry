@@ -37,6 +37,12 @@ from .environment import (
     EnvironmentalReading,
     build_environmental_reading,
 )
+from .forecast import (
+    DewPointOutlook,
+    ForecastLevel,
+    ForecastPoint,
+    evaluate_dew_point_outlook,
+)
 from .hvac import ClimateAdapter, ClimateGroupAdapter
 from .restoration import restore, serialize
 from .setpoint import DrySetpointConfig, DrySetpointResult, calculate_dry_setpoint
@@ -44,6 +50,7 @@ from .settings import ZoneSettings
 from .state_machine import ControllerState, StateSnapshot, TimingConfig, next_state
 
 EVALUATION_INTERVAL = timedelta(minutes=1)
+FORECAST_REFRESH_INTERVAL = timedelta(minutes=30)
 RECOVERABLE_EQUIPMENT_ERRORS = {
     "equipment_unavailable",
     "dry_mode_unsupported",
@@ -78,6 +85,12 @@ class ZealDryController:
     environmental_reading: EnvironmentalReading | None = None
     external_environmental_reading: EnvironmentalReading | None = None
     external_input_error: str | None = None
+    forecast_outlook: DewPointOutlook = field(
+        default_factory=lambda: DewPointOutlook(
+            ForecastLevel.UNAVAILABLE, "No outdoor forecast has been loaded."
+        )
+    )
+    forecast_updated_at: datetime | None = None
     decision: DryingDecision | None = None
     state_snapshot: StateSnapshot = field(default_factory=StateSnapshot)
     proposed_setpoint: DrySetpointResult | None = None
@@ -305,6 +318,7 @@ class ZealDryController:
         """Evaluate inputs, enforce protections, command equipment, then publish."""
         now = dt_util.utcnow()
         self._update_environment(now)
+        await self._async_update_weather_forecast(now)
         self._update_control_state(now)
         await self._apply_equipment_request(now)
         self.last_updated = now
@@ -381,6 +395,71 @@ class ZealDryController:
             )
         except (EnvironmentalInputError, TypeError, ValueError) as err:
             self.external_input_error = str(err)
+
+    async def _async_update_weather_forecast(self, now: datetime) -> None:
+        """Refresh the standard HA hourly forecast at a bounded cadence."""
+        if not self.weather_entity or self.external_environmental_reading is None:
+            self.forecast_outlook = evaluate_dew_point_outlook(
+                self.external_environmental_reading, [], self.thresholds, now
+            )
+            return
+        if (
+            self.forecast_updated_at is not None
+            and now - self.forecast_updated_at < FORECAST_REFRESH_INTERVAL
+        ):
+            return
+        if not self.hass.services.has_service("weather", "get_forecasts"):
+            self.forecast_outlook = DewPointOutlook(
+                ForecastLevel.UNAVAILABLE,
+                "The selected weather entity does not expose an hourly forecast.",
+            )
+            return
+
+        self.forecast_updated_at = now
+        try:
+            response = await self.hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"type": "hourly", "entity_id": self.weather_entity},
+                blocking=True,
+                return_response=True,
+            )
+            raw_points = (response or {}).get(self.weather_entity, {}).get(
+                "forecast", []
+            )
+            weather = self.hass.states.get(self.weather_entity)
+            unit = weather.attributes.get(
+                "temperature_unit", UnitOfTemperature.CELSIUS
+            )
+            points = []
+            for item in raw_points:
+                at = dt_util.parse_datetime(item.get("datetime", ""))
+                temperature = item.get("temperature")
+                humidity = item.get("humidity")
+                if at is None or temperature is None or humidity is None:
+                    continue
+                temperature_c = TemperatureConverter.convert(
+                    float(temperature), unit, UnitOfTemperature.CELSIUS
+                )
+                points.append(
+                    ForecastPoint(
+                        at=at,
+                        reading=build_environmental_reading(
+                            temperature_c, float(humidity)
+                        ),
+                    )
+                )
+            self.forecast_outlook = evaluate_dew_point_outlook(
+                self.external_environmental_reading,
+                points,
+                self.thresholds,
+                now,
+            )
+        except (EnvironmentalInputError, HomeAssistantError, TypeError, ValueError):
+            self.forecast_outlook = DewPointOutlook(
+                ForecastLevel.UNAVAILABLE,
+                "The hourly outdoor forecast could not be evaluated.",
+            )
 
     def _update_control_state(self, now: datetime) -> None:
         """Apply timing protections and latch equipment or feedback faults."""

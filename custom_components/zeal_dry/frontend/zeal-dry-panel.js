@@ -102,6 +102,22 @@ class ZealDryPanel extends HTMLElement {
     return `${Number(value).toFixed(1)}${suffix}`;
   }
 
+  _historyUrl(entityIds) {
+    const available = [...new Set((entityIds || []).filter(
+      (entityId) => entityId && this._hass?.states?.[entityId]
+    ))];
+    return available.length
+      ? `/history?entity_id=${encodeURIComponent(available.join(","))}`
+      : "";
+  }
+
+  _historyLink(entityIds, label) {
+    const url = this._historyUrl(entityIds);
+    return url
+      ? `<a class="history-link" href="${this._escape(url)}" title="${this._escape(label)}" aria-label="${this._escape(label)}"><ha-icon icon="mdi:chart-timeline-variant"></ha-icon></a>`
+      : "";
+  }
+
   _countdown(seconds) {
     if (seconds === null || seconds === undefined) return "";
     const sinceUpdate = this._statusReceivedAt
@@ -148,6 +164,7 @@ class ZealDryPanel extends HTMLElement {
     const status = config.status;
     const state = config.controller;
     const external = state.external;
+    const outlook = external.outlook;
     const countdown = this._countdown(status.remaining_seconds);
     const elapsed = this._duration(status.elapsed_seconds);
     const timer = elapsed || countdown;
@@ -166,20 +183,21 @@ class ZealDryPanel extends HTMLElement {
       <div class="grid metrics">
         ${this._metric("Moisture risk", state.risk, "mdi:water-alert")}
         ${this._metric("Moisture demand", state.demand === null ? "Unknown" : state.demand ? "On" : "Off", "mdi:water-pump")}
-        ${this._metric("Temperature", this._number(state.temperature_c, " °C"), "mdi:thermometer")}
-        ${this._metric("Humidity", this._number(state.humidity, "%"), "mdi:water-percent")}
-        ${this._metric("Dew point", this._number(state.dew_point_c, " °C"), "mdi:weather-fog")}
+        ${this._metric("Temperature", this._number(state.temperature_c, " °C"), "mdi:thermometer", [config.setup.temperature_entity])}
+        ${this._metric("Humidity", this._number(state.humidity, "%"), "mdi:water-percent", [config.setup.humidity_entity])}
+        ${this._metric("Dew point", this._number(state.dew_point_c, " °C"), "mdi:weather-fog", [config.setup.temperature_entity, config.setup.humidity_entity])}
         ${this._metric("Dew-point spread", this._number(state.dew_point_spread_c, " °C"), "mdi:arrow-expand-vertical")}
       </div>
       <div class="grid two">
         <article><h3>Controller</h3><dl><dt>State</dt><dd>${this._escape(state.state)}</dd><dt>Decision</dt><dd>${this._escape(state.reason)}</dd><dt>Dry target</dt><dd>${this._number(state.proposed_target_c, " °C")}</dd><dt>Fault</dt><dd>${this._escape(state.fault || "None")}</dd></dl></article>
         <article><h3>Air-conditioning units</h3>${acus}</article>
-        <article><h3>External environment</h3>${external.entity_id ? `<dl><dt>Source</dt><dd>${this._escape(external.entity_id)}</dd><dt>Temperature</dt><dd>${this._number(external.temperature_c, " °C")}</dd><dt>Humidity</dt><dd>${this._number(external.humidity, "%")}</dd><dt>Dew point</dt><dd>${this._number(external.dew_point_c, " °C")}</dd><dt>Indoor minus outdoor DP</dt><dd>${this._number(external.dew_point_difference_c, " °C")}</dd></dl>${external.error ? `<p class="muted">${this._escape(external.error)}</p>` : ""}` : `<p class="muted">No external weather entity is configured.</p>`}</article>
+        <article><h3>External environment ${this._historyLink([external.entity_id], "Open outdoor weather history")}</h3>${external.entity_id ? `<dl><dt>Source</dt><dd>${this._escape(external.entity_id)}</dd><dt>Temperature</dt><dd>${this._number(external.temperature_c, " °C")}</dd><dt>Humidity</dt><dd>${this._number(external.humidity, "%")}</dd><dt>Dew point</dt><dd>${this._number(external.dew_point_c, " °C")}</dd><dt>Indoor minus outdoor DP</dt><dd>${this._number(external.dew_point_difference_c, " °C")}</dd></dl>${external.error ? `<p class="muted">${this._escape(external.error)}</p>` : ""}` : `<p class="muted">No external weather entity is configured.</p>`}</article>
+        <article class="outlook ${this._escape(outlook.level)}"><h3>Outdoor dew-point outlook</h3><strong>${this._escape(outlook.level)}</strong><p>${this._escape(outlook.explanation)}</p><small>Forecast outlook informs preparedness; current indoor readings remain responsible for Dry demand.</small></article>
       </div>`;
   }
 
-  _metric(label, value, icon) {
-    return `<article class="metric"><ha-icon icon="${icon}"></ha-icon><div><small>${this._escape(label)}</small><strong>${this._escape(value)}</strong></div></article>`;
+  _metric(label, value, icon, historyEntities = []) {
+    return `<article class="metric"><ha-icon icon="${icon}"></ha-icon><div><small>${this._escape(label)}</small><strong>${this._escape(value)}</strong></div>${this._historyLink(historyEntities, `Open ${label} history`)}</article>`;
   }
 
   _overrides() {
@@ -342,6 +360,7 @@ class ZealDryPanel extends HTMLElement {
       nav{display:flex;gap:4px;padding:0 28px;background:var(--card-background-color);border-bottom:1px solid var(--divider-color)}nav button{border:0;background:none;padding:15px 20px;color:var(--secondary-text-color);font-weight:600;cursor:pointer;border-bottom:3px solid transparent}nav button.active{color:#078c9c;border-color:#078c9c}
       main{max-width:1180px;margin:0 auto;padding:26px}.status{display:flex;gap:18px;align-items:center;padding:22px 24px;border-radius:16px;background:#eaf8fa;border-left:6px solid #078c9c;margin-bottom:20px}.status ha-icon{width:38px;height:38px}.status h2{margin:0 0 5px}.status p{margin:0}.status.fault{background:#fdecec;border-color:#c62828;color:#8f1d1d}.status.waiting{background:#fff7df;border-color:#e39b00}.status.drying{background:#e6f4ff;border-color:#1976d2}.status.inhibited{background:#f1f1f1;border-color:#777}
       .grid{display:grid;gap:16px}.metrics{grid-template-columns:repeat(3,1fr);margin-bottom:16px}.two{grid-template-columns:1fr 1fr}article,.metric,.wide{background:var(--card-background-color);border:1px solid var(--divider-color);border-radius:14px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.05)}article h2,article h3{margin-top:0}.metric{display:flex;align-items:center;gap:14px}.metric ha-icon{color:#078c9c}.metric strong{display:block;font-size:22px;margin-top:4px}.metric small{color:var(--secondary-text-color)}
+      .metric .history-link{margin-left:auto}.history-link{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;width:34px;height:34px;border-radius:50%;color:var(--primary-color);text-decoration:none}.history-link:hover,.history-link:focus-visible{background:var(--secondary-background-color);outline:2px solid var(--primary-color);outline-offset:1px}.history-link ha-icon{--mdc-icon-size:22px}.outlook{border-left:6px solid #2e7d32}.outlook>strong{text-transform:capitalize;font-size:22px}.outlook.medium{border-left-color:#ef9b00}.outlook.critical{border-left-color:#c62828}.outlook.unavailable{border-left-color:#777}.outlook small{color:var(--secondary-text-color)}
       dl{display:grid;grid-template-columns:130px 1fr;gap:10px;margin:0}dt{color:var(--secondary-text-color)}dd{margin:0;font-weight:600}.acu-row{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid var(--divider-color)}.acu-row:last-child{border-bottom:0}.pill{padding:5px 10px;border-radius:999px;background:#e7f6eb;color:#176a2f;text-transform:capitalize}.pill.bad{background:#fdecec;color:#9a2323}.muted{color:var(--secondary-text-color)}
       .profile-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}.profile{display:flex;flex-direction:column;text-align:left;gap:9px;padding:18px;border:2px solid var(--divider-color);border-radius:12px;background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer}.profile ha-icon{color:#078c9c}.profile.selected{border-color:#078c9c;background:#eaf8fa}.profile span{color:var(--secondary-text-color);line-height:1.4}
       .setup h3{margin-top:28px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.form-grid.thirds{grid-template-columns:repeat(3,1fr)}.field{display:block;margin:13px 0}.field>span{display:block;font-weight:600;margin-bottom:7px}.field select,.field input,.instance select{width:100%;min-height:44px;padding:9px 11px;border:1px solid var(--divider-color);border-radius:8px;background:var(--card-background-color);color:var(--primary-text-color)}.field select[multiple]{min-height:110px}.unit{display:flex;align-items:center}.unit input{border-radius:8px 0 0 8px}.unit b{height:44px;padding:12px;background:var(--secondary-background-color);border:1px solid var(--divider-color);border-left:0;border-radius:0 8px 8px 0}.checkbox{display:flex;gap:10px;margin-top:28px;align-items:flex-start}.checkbox input{width:20px;height:20px}.actions{text-align:right;margin-top:24px}.primary{border:0;border-radius:9px;padding:12px 20px;background:#078c9c;color:white;font-weight:700;cursor:pointer}.primary:disabled{opacity:.55}

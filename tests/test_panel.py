@@ -79,6 +79,9 @@ def test_frontend_has_focused_tabs_and_status_banner():
     assert "remaining_seconds" in source
     assert "elapsed_seconds" in source
     assert 'padStart(2, "0")' in source
+    assert "_historyUrl(entityIds)" in source
+    assert "Open ${label} history" in source
+    assert "Outdoor dew-point outlook" in source
     assert "Show ZEAL-Dry in the Home Assistant sidebar" in source
     assert 'if (!customElements.get("zeal-dry-panel"))' in source
     assert 'customElements.define("zeal-dry-panel", ZealDryPanel);' in source

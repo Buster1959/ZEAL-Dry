@@ -182,6 +182,23 @@ def _configuration(hass: HomeAssistant, entry_id: str) -> dict:
                     else None
                 ),
                 "error": controller.external_input_error,
+                "outlook": {
+                    "level": controller.forecast_outlook.level.value,
+                    "explanation": controller.forecast_outlook.explanation,
+                    "maximum_dew_point_c": (
+                        controller.forecast_outlook.maximum_dew_point_c
+                    ),
+                    "maximum_rise_c": controller.forecast_outlook.maximum_rise_c,
+                    "rise_c_per_hour": (
+                        controller.forecast_outlook.rise_c_per_hour
+                    ),
+                    "hours_ahead": controller.forecast_outlook.hours_ahead,
+                    "updated_at": (
+                        controller.forecast_updated_at.isoformat()
+                        if controller.forecast_updated_at
+                        else None
+                    ),
+                },
             },
             "proposed_target_c": (
                 controller.proposed_setpoint.applied_target_c
