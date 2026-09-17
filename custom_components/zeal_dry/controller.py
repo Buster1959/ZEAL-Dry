@@ -81,6 +81,7 @@ class ZealDryController:
     input_error: str | None = None
     last_updated: datetime | None = None
     above_maximum_since: datetime | None = None
+    rest_cause: str | None = field(default=None, init=False)
     actuator: DummyActuator | ClimateAdapter | ClimateGroupAdapter | None = field(
         default=None, init=False
     )
@@ -119,6 +120,7 @@ class ZealDryController:
         self._apply_settings()
         # Interrupted live runs must stop and observe a fresh rest period.
         if self.control_mode == CONTROL_MODE_CLIMATE:
+            self.rest_cause = "restart"
             self.state_snapshot = restore(saved, dt_util.utcnow())
             saved_owned = set(saved.get("owned_entities", []))
             adapters = [
@@ -365,6 +367,8 @@ class ZealDryController:
             and self.command_error is None,
             inhibited=self.profile == "off",
         )
+        if self.state_snapshot.reason != "minimum_rest_time_active":
+            self.rest_cause = None
         if self.command_error and self.profile != "off":
             self._record_fault(now)
         # Allow one minute for device feedback before treating a mode mismatch as a fault.

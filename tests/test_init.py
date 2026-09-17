@@ -18,6 +18,12 @@ async def test_setup_and_unload_entry(hass):
         patch.object(
             hass.config_entries, "async_unload_platforms", AsyncMock(return_value=True)
         ),
+        patch(
+            "custom_components.zeal_dry.async_sync_panel", AsyncMock()
+        ),
+        patch(
+            "custom_components.zeal_dry.async_remove_panel", AsyncMock()
+        ),
     ):
         assert await async_setup_entry(hass, entry)
         assert entry.entry_id in hass.data[DOMAIN]["controllers"]

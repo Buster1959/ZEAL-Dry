@@ -18,6 +18,8 @@ from .const import (
     DOMAIN,
 )
 from .controller import ZealDryController
+from .panel import async_remove_panel, async_sync_panel
+from .websocket_api import async_register_commands
 
 PLATFORMS = [
     Platform.SENSOR,
@@ -50,9 +52,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         control_mode=entry.data.get(CONF_CONTROL_MODE, DEFAULT_CONTROL_MODE),
     )
     controllers[entry.entry_id] = controller
+    async_register_commands(hass)
     await controller.async_start()
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+    await async_sync_panel(hass)
     return True
 
 
@@ -64,6 +68,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     controller = hass.data[DOMAIN][DATA_CONTROLLERS].pop(entry.entry_id, None)
     if controller is not None:
         await controller.async_stop()
+    if not hass.data[DOMAIN][DATA_CONTROLLERS]:
+        await async_remove_panel(hass)
     return True
 
 

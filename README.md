@@ -21,11 +21,31 @@ After installing in HACS:
 3. Search for **ZEAL-Dry**.
 4. Create a zone.
 5. Choose **Monitoring only**, **Test / Dummy ACU**, or **Live climate control**.
-6. For the 0.2.1 test build, follow [installation and acceptance checks](docs/BLOCKS_6_7_TESTING.md).
+6. Open **ZEAL-Dry** from the Home Assistant sidebar.
+
+The integration options include **Show ZEAL-Dry in the Home Assistant sidebar**.
+If the link is hidden, restore it from **Settings → Devices & services →
+ZEAL-Dry → Configure**. The panel remains available directly at `/zeal-dry`.
+
+## Web UI
+
+Version 0.3.0 adds a dedicated Home Assistant panel with the focused tabs agreed
+for ZEAL-Dry:
+
+- **Overview** — live moisture risk, demand, ACU state and a protected-start or
+  runtime countdown banner, including the reason **Following restart**.
+- **Overrides** — switch between Property Protection, Occupied and Off profiles.
+- **Setup** — select temperature and humidity sensors, one or more Dry-capable
+  ACUs, configure protection thresholds and choose sidebar visibility.
+
+Home Assistant entities remain available for dashboards and automations.
 
 ## Current development status
 
-Version 0.2.1 implements Blocks 6–7: Dry-capable multi-ACU control, restart protection, persistent settings, recoverable equipment availability, and Home Assistant status/control entities. Live operation is a controlled prototype and still needs a supervised test on your AC.
+Version 0.3.0 implements Blocks 6–7 plus the dedicated Web UI: Dry-capable
+multi-ACU control, restart protection, persistent settings, recoverable equipment
+availability, and Home Assistant status/control entities. Live operation remains
+a controlled prototype and should be tested under supervision on your AC.
 
 The built-in test mode provides adjustable temperature and humidity values plus a dummy ACU so the moisture and dew-point control logic can be exercised without external YAML or real equipment.
 

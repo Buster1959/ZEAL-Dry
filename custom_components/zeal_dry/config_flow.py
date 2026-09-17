@@ -12,6 +12,7 @@ from .const import (
     CONF_CLIMATE_ENTITIES,
     CONF_CONTROL_MODE,
     CONF_HUMIDITY_ENTITY,
+    CONF_SHOW_IN_SIDEBAR,
     CONF_TEMPERATURE_ENTITY,
     CONF_ZONE_NAME,
     CONTROL_MODE_CLIMATE,
@@ -247,20 +248,30 @@ class ZealDryOptionsFlow(config_entries.OptionsFlow):
         ]
         errors = {}
         if user_input is not None:
+            show_in_sidebar = user_input.pop(CONF_SHOW_IN_SIDEBAR)
             try:
                 await controller.async_update_settings(**user_input)
             except ValueError:
                 errors["base"] = "invalid_settings"
             else:
                 return self.async_create_entry(
-                    title="", data=dict(self.config_entry.options)
+                    title="",
+                    data={
+                        **dict(self.config_entry.options),
+                        CONF_SHOW_IN_SIDEBAR: show_in_sidebar,
+                    },
                 )
-        schema = vol.Schema(
-            {
-                vol.Required(key, default=getattr(controller.settings, key)): vol.All(
-                    vol.Coerce(float), vol.Range(min=low, max=high)
-                )
-                for key, (low, high) in OPTION_SETTINGS.items()
-            }
-        )
+        fields = {
+            vol.Required(key, default=getattr(controller.settings, key)): vol.All(
+                vol.Coerce(float), vol.Range(min=low, max=high)
+            )
+            for key, (low, high) in OPTION_SETTINGS.items()
+        }
+        fields[
+            vol.Required(
+                CONF_SHOW_IN_SIDEBAR,
+                default=self.config_entry.options.get(CONF_SHOW_IN_SIDEBAR, True),
+            )
+        ] = bool
+        schema = vol.Schema(fields)
         return self.async_show_form(step_id="init", data_schema=schema, errors=errors)

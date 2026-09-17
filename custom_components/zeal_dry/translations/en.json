@@ -67,7 +67,8 @@
           "recovery_minutes": "Recovery observation (minutes)",
           "maximum_run_minutes": "Maximum continuous runtime (minutes)",
           "minimum_c": "Minimum Dry target (\u00b0C)",
-          "maximum_c": "Maximum Dry target (\u00b0C)"
+          "maximum_c": "Maximum Dry target (\u00b0C)",
+          "show_in_sidebar": "Show ZEAL-Dry in the Home Assistant sidebar"
         }
       }
     },
