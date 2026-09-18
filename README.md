@@ -44,6 +44,21 @@ for ZEAL-Dry:
   Drying response selector chooses Early protection, Balanced or Economy while
   preserving critical moisture overrides.
 
+### Three-zone interface
+
+The Overview keeps every zone visible in one combined status view.
+
+![ZEAL-Dry three-zone Overview](docs/images/zeal-dry-three-zone-overview-desktop.png)
+
+Overrides remain independent per zone while being available from the same page.
+
+![ZEAL-Dry three-zone Overrides](docs/images/zeal-dry-three-zone-overrides-desktop.png)
+
+Administrators can add, select, edit and remove zones from Setup. Equipment
+ownership is shown alongside the zone-specific sensors and moisture policy.
+
+![ZEAL-Dry multi-zone Setup](docs/images/zeal-dry-multi-zone-setup-desktop.png)
+
 Home Assistant entities remain available for dashboards and automations.
 
 ## Current development status
@@ -87,6 +102,7 @@ Detailed project documentation is under [`/docs`](docs/), including:
 - [UI design](docs/UI_DESIGN.md)
 - [Project positioning](docs/PROJECT_POSITIONING.md)
 - [Brand assets](docs/brand/README.md)
+- [Documentation screenshots](docs/images/README.md)
 
 ## Important scope boundary
 
