@@ -19,6 +19,7 @@ from custom_components.zeal_dry.settings import ZoneSettings
         {"minimum_run_minutes": 120, "maximum_run_minutes": 20},
         {"minimum_rest_minutes": 0},
         {"profile": "other"},
+        {"response_profile": "other"},
         {"minimum_c": 30, "maximum_c": 20},
     ],
 )
@@ -40,6 +41,10 @@ def test_fixed_strategy_clamps():
         ).applied_target_c
         == 20
     )
+
+
+def test_balanced_is_the_default_drying_response():
+    assert ZoneSettings().response_profile == "balanced"
 
 
 async def test_settings_survive_restart_and_off_stops(hass):

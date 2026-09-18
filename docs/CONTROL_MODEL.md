@@ -113,6 +113,15 @@ Critical threshold or another explicit protection condition has been met.
 ### `unknown`
 Inputs are unavailable, stale or invalid.
 
+### Dew-point spread risk
+
+ZEAL-Dry classifies the room temperature minus dew point as Normal above 6 °C,
+Elevated from 4–6 °C, High from 2–4 °C, and Critical at 2 °C or less. The final
+moisture risk is the highest level indicated by RH, absolute dew point or this
+spread. The selected Drying response then permits demand from Elevated (Early
+protection), High (Balanced) or Critical (Economy). Critical RH and absolute
+dew point remain immediate protection conditions for every response.
+
 Risk is an assessment. It is not identical to controller state.
 
 For example, risk can be `elevated` while controller state is `monitoring`.

@@ -50,6 +50,61 @@ def test_critical_dew_point_is_immediate():
     assert decision.reason == "dew_point_critical"
 
 
+def test_early_protection_acts_at_elevated_risk():
+    reading = build_environmental_reading(18.0, 73.0)
+    early = evaluate_moisture(
+        reading, MoistureThresholds(), response_profile="early_protection"
+    )
+    balanced = evaluate_moisture(
+        reading, MoistureThresholds(), response_profile="balanced"
+    )
+    assert early.risk is MoistureRisk.ELEVATED
+    assert early.demand is True
+    assert balanced.demand is False
+
+
+def test_balanced_acts_at_high_while_economy_waits_for_critical():
+    reading = build_environmental_reading(24.0, 60.0)
+    balanced = evaluate_moisture(
+        reading, MoistureThresholds(), response_profile="balanced"
+    )
+    economy = evaluate_moisture(
+        reading, MoistureThresholds(), response_profile="economy"
+    )
+    assert balanced.risk is MoistureRisk.HIGH
+    assert balanced.demand is True
+    assert economy.demand is False
+
+
+def test_critical_absolute_dew_point_overrides_economy():
+    decision = evaluate_moisture(
+        build_environmental_reading(28.0, 60.0),
+        MoistureThresholds(),
+        response_profile="economy",
+    )
+    assert decision.risk is MoistureRisk.CRITICAL
+    assert decision.demand is True
+
+
+def test_spread_can_be_highest_risk_signal():
+    thresholds = MoistureThresholds(
+        preferred_rh=90,
+        maximum_rh=94,
+        critical_rh=99,
+        preferred_dew_point_c=25,
+        maximum_dew_point_c=27,
+        critical_dew_point_c=30,
+    )
+    decision = evaluate_moisture(
+        build_environmental_reading(18.0, 90.0),
+        thresholds,
+        response_profile="economy",
+    )
+    assert decision.risk is MoistureRisk.CRITICAL
+    assert decision.reason == "spread_critical"
+    assert decision.demand is True
+
+
 def test_same_rh_can_produce_different_moisture_decisions():
     cool = evaluate_moisture(build_environmental_reading(12.0, 60.0), MoistureThresholds())
     warm = evaluate_moisture(build_environmental_reading(24.0, 60.0), MoistureThresholds())
@@ -72,3 +127,12 @@ def test_invalid_rh_threshold_order_rejected(preferred, maximum, critical):
 def test_invalid_dew_point_threshold_order_rejected():
     with pytest.raises(ValueError):
         MoistureThresholds(preferred_dew_point_c=15.0, maximum_dew_point_c=12.0, critical_dew_point_c=17.0)
+
+
+def test_invalid_response_profile_rejected():
+    with pytest.raises(ValueError, match="Invalid response profile"):
+        evaluate_moisture(
+            build_environmental_reading(18.0, 60.0),
+            MoistureThresholds(),
+            response_profile="reckless",
+        )

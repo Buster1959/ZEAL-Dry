@@ -15,6 +15,10 @@ NUMBER_SETTINGS = {
 # Selector controls: each entry defines its label and supported choices.
 SELECT_SETTINGS = {
     "profile": ("Operating profile", ["property_protection", "occupied", "off"]),
+    "response_profile": (
+        "Drying response",
+        ["early_protection", "balanced", "economy"],
+    ),
     "strategy": ("Dry temperature strategy", ["room_offset", "fixed"]),
 }
 # Less frequently changed options: each entry defines its allowed range.
@@ -40,6 +44,7 @@ class ZoneSettings:
     safety_margin_c: float = 3
     fixed_target_c: float = 18
     profile: str = "property_protection"
+    response_profile: str = "balanced"
     strategy: str = "room_offset"
     persistence_minutes: float = 15
     minimum_run_minutes: float = 20

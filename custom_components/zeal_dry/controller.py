@@ -370,7 +370,10 @@ class ZealDryController:
                 now - self.above_maximum_since if self.above_maximum_since else None
             )
             self.decision = evaluate_moisture(
-                self.environmental_reading, self.thresholds, elapsed
+                self.environmental_reading,
+                self.thresholds,
+                elapsed,
+                self.settings.response_profile,
             )
         except EnvironmentalInputError as err:
             self.environmental_reading = None
