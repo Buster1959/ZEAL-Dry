@@ -84,6 +84,9 @@ def test_frontend_has_focused_tabs_and_status_banner():
     assert "Outdoor dew-point outlook" in source
     assert "Sensor health" in source
     assert "report_age_minutes" in source
+    assert "this._expandedZones = new Set()" in source
+    assert 'data-zone-details="${this._escape(config.entry_id)}"' in source
+    assert "_onToggle(event)" in source
     assert "Early protection — act from Elevated risk" in source
     assert "Balanced — act from High risk" in source
     assert "Economy — act at Critical risk" in source

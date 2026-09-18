@@ -29,7 +29,7 @@ ZEAL-Dry → Configure**. The panel remains available directly at `/zeal-dry`.
 
 ## Web UI
 
-Version 0.3.8 adds a dedicated Home Assistant panel with the focused tabs agreed
+Version 0.3.9 adds a dedicated Home Assistant panel with the focused tabs agreed
 for ZEAL-Dry:
 
 - **Overview** — one combined view of every zone, with live moisture risk,
@@ -48,7 +48,7 @@ Home Assistant entities remain available for dashboards and automations.
 
 ## Current development status
 
-Version 0.3.8 implements Blocks 6–7 plus the dedicated Web UI: Dry-capable
+Version 0.3.9 implements Blocks 6–7 plus the dedicated Web UI: Dry-capable
 multi-ACU control, restart protection, persistent settings, recoverable equipment
 availability, and Home Assistant status/control entities. Live operation remains
 a controlled prototype and should be tested under supervision on your AC.

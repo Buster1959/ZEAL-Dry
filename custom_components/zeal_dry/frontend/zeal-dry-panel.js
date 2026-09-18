@@ -10,6 +10,7 @@ class ZealDryPanel extends HTMLElement {
     this._configuration = null;
     this._configurations = [];
     this._showAddZone = false;
+    this._expandedZones = new Set();
     this._loading = true;
     this._saving = false;
     this._notice = "";
@@ -19,6 +20,7 @@ class ZealDryPanel extends HTMLElement {
     this._lastRefreshAt = null;
     this.shadowRoot.addEventListener("click", (event) => this._onClick(event));
     this.shadowRoot.addEventListener("change", (event) => this._onChange(event));
+    this.shadowRoot.addEventListener("toggle", (event) => this._onToggle(event), true);
   }
 
   set hass(value) {
@@ -215,7 +217,7 @@ class ZealDryPanel extends HTMLElement {
         ${this._metric("Dew point", this._number(state.dew_point_c, " °C"), "mdi:weather-fog", [config.setup.temperature_entity, config.setup.humidity_entity])}
         ${this._metric("Dew-point spread", this._number(state.dew_point_spread_c, " °C"), "mdi:arrow-expand-vertical")}
       </div>
-      <details><summary>Zone details</summary><div class="grid two details-grid">
+      <details data-zone-details="${this._escape(config.entry_id)}" ${this._expandedZones.has(config.entry_id) ? "open" : ""}><summary>Zone details</summary><div class="grid two details-grid">
         <article><h3>Controller</h3><dl><dt>State</dt><dd>${this._escape(state.state)}</dd><dt>Decision</dt><dd>${this._escape(state.reason)}</dd><dt>Drying response</dt><dd>${this._escape(config.setup.settings.response_profile.replaceAll("_", " "))}</dd><dt>Dry target</dt><dd>${this._number(state.proposed_target_c, " °C")}</dd><dt>Fault</dt><dd>${this._escape(state.fault || "None")}</dd></dl></article>
         <article><h3>Air-conditioning units</h3>${acus}</article>
         <article><h3>Sensor health</h3>${sensors}</article>
@@ -349,6 +351,13 @@ class ZealDryPanel extends HTMLElement {
       this._entryId = event.target.value;
       await this._load(true);
     }
+  }
+
+  _onToggle(event) {
+    const entryId = event.target?.dataset?.zoneDetails;
+    if (!entryId) return;
+    if (event.target.open) this._expandedZones.add(entryId);
+    else this._expandedZones.delete(entryId);
   }
 
   async _setProfile(entryId, profile) {
