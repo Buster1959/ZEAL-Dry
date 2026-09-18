@@ -30,6 +30,9 @@ from .const import (
     DEFAULT_CONTROL_MODE,
     DEFAULT_TEST_HUMIDITY,
     DEFAULT_TEST_TEMPERATURE_C,
+    DOMAIN,
+    SENSOR_OFFLINE_DEBOUNCE_SECONDS,
+    SENSOR_STALE_THRESHOLD_SECONDS,
 )
 from .decision import DryingDecision, MoistureThresholds, evaluate_moisture
 from .environment import (
@@ -105,6 +108,12 @@ class ZealDryController:
     _remove_listener: object | None = field(default=None, init=False, repr=False)
     _remove_interval: object | None = field(default=None, init=False, repr=False)
     _listeners: set[Callable[[], None]] = field(
+        default_factory=set, init=False, repr=False
+    )
+    _sensor_unhealthy_since: dict[str, datetime] = field(
+        default_factory=dict, init=False, repr=False
+    )
+    _sensor_offline_notified: set[str] = field(
         default_factory=set, init=False, repr=False
     )
 
@@ -318,6 +327,7 @@ class ZealDryController:
         """Evaluate inputs, enforce protections, command equipment, then publish."""
         now = dt_util.utcnow()
         self._update_environment(now)
+        await self._async_check_sensor_health(now)
         await self._async_update_weather_forecast(now)
         self._update_control_state(now)
         await self._apply_equipment_request(now)
@@ -552,7 +562,10 @@ class ZealDryController:
         """Reject missing, stale or nonnumeric sensor readings."""
         if state is None:
             raise EnvironmentalInputError(f"{label} entity is missing")
-        if dt_util.utcnow() - state.last_reported > timedelta(minutes=30):
+        last_reported = getattr(state, "last_reported", state.last_updated)
+        if (
+            dt_util.utcnow() - last_reported
+        ).total_seconds() > SENSOR_STALE_THRESHOLD_SECONDS:
             raise EnvironmentalInputError(f"{label} sensor is stale")
         if state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
             raise EnvironmentalInputError(f"{label} entity is {state.state}")
@@ -560,6 +573,68 @@ class ZealDryController:
             return float(state.state)
         except (TypeError, ValueError) as err:
             raise EnvironmentalInputError(f"{label} state is not numeric") from err
+
+    def _configured_sensor_health(self) -> list[tuple[str, str, str | None]]:
+        """Return every required input and its exact current health problem."""
+        results: list[tuple[str, str, str | None]] = []
+        for label, entity_id in (
+            ("temperature", self.temperature_entity),
+            ("humidity", self.humidity_entity),
+        ):
+            if not entity_id:
+                continue
+            try:
+                self._numeric_state(self.hass.states.get(entity_id), label)
+            except EnvironmentalInputError as err:
+                results.append((label, entity_id, str(err)))
+            else:
+                results.append((label, entity_id, None))
+        return results
+
+    async def _async_check_sensor_health(self, now: datetime) -> None:
+        """Debounce sensor warnings, notify once, and dismiss on recovery."""
+        if self.control_mode == CONTROL_MODE_DUMMY:
+            return
+        for label, entity_id, unhealthy_reason in self._configured_sensor_health():
+            notification_id = (
+                f"{DOMAIN}_offline_{self.entry_id}_{entity_id.replace('.', '_')}"
+            )
+            if unhealthy_reason is None:
+                self._sensor_unhealthy_since.pop(entity_id, None)
+                if entity_id in self._sensor_offline_notified:
+                    await self.hass.services.async_call(
+                        "persistent_notification",
+                        "dismiss",
+                        {"notification_id": notification_id},
+                        blocking=True,
+                    )
+                    self._sensor_offline_notified.discard(entity_id)
+                continue
+
+            first_seen = self._sensor_unhealthy_since.setdefault(entity_id, now)
+            if (
+                entity_id in self._sensor_offline_notified
+                or (now - first_seen).total_seconds()
+                <= SENSOR_OFFLINE_DEBOUNCE_SECONDS
+            ):
+                continue
+
+            await self.hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "notification_id": notification_id,
+                    "title": "ZEAL-Dry sensor health warning",
+                    "message": (
+                        f"{entity_id}, the {label} input for {self.zone_name}, "
+                        f"is not currently usable: {unhealthy_reason}. "
+                        "Dry control remains suspended until trustworthy "
+                        "readings return."
+                    ),
+                },
+                blocking=True,
+            )
+            self._sensor_offline_notified.add(entity_id)
 
     @classmethod
     def _temperature_c(cls, state: State | None) -> float:

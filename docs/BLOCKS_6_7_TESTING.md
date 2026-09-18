@@ -25,7 +25,8 @@ or installed in your Home Assistant instance.
   not proof that physical equipment obeyed; verify the AC during the first test.
 - Every live startup/reload waits a full minimum rest period, at least ten minutes.
   A previously owned run, or a Dry mode observed at startup, is stopped first.
-- Sensor loss, stale readings (30 minutes since last report), maximum runtime,
+- Sensor loss, stale readings (30 minutes since the last Home Assistant
+  `last_reported` timestamp), maximum runtime,
   profile Off and storage-write failures stop active control.
 - State/ownership is saved before equipment starts. Abrupt shutdown cannot cause
   the next startup to bypass its fresh rest period.

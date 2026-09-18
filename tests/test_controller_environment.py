@@ -2,9 +2,17 @@
 
 from __future__ import annotations
 
-from homeassistant.const import UnitOfTemperature
+import pytest
 
+from homeassistant.const import UnitOfTemperature
+from homeassistant.util import dt as dt_util
+
+from custom_components.zeal_dry.const import (
+    SENSOR_OFFLINE_DEBOUNCE_SECONDS,
+    SENSOR_STALE_THRESHOLD_SECONDS,
+)
 from custom_components.zeal_dry.controller import ZealDryController
+from custom_components.zeal_dry.environment import EnvironmentalInputError
 
 
 async def test_controller_builds_environmental_reading(hass):
@@ -55,6 +63,55 @@ async def test_unavailable_input_clears_reading(hass):
     assert controller.input_error == "humidity entity is unavailable"
 
     await controller.async_stop()
+
+
+async def test_quiet_sensor_uses_thirty_minute_stale_period(hass, freezer):
+    """A quiet reading stays usable for 30 minutes, then suspends Dry control."""
+    hass.states.async_set("sensor.room_humidity", "63")
+    state = hass.states["sensor.room_humidity"]
+
+    freezer.tick(SENSOR_STALE_THRESHOLD_SECONDS - 1)
+    assert ZealDryController._numeric_state(state, "humidity") == 63.0
+
+    freezer.tick(2)
+    with pytest.raises(EnvironmentalInputError, match="humidity sensor is stale"):
+        ZealDryController._numeric_state(state, "humidity")
+
+
+async def test_sensor_warning_is_debounced_once_and_dismissed(hass, freezer):
+    """Match ZEAL-Heat's five-minute warning and automatic recovery dismissal."""
+    creates: list[dict] = []
+    dismisses: list[dict] = []
+
+    async def create(call):
+        creates.append(dict(call.data))
+
+    async def dismiss(call):
+        dismisses.append(dict(call.data))
+
+    hass.services.async_register("persistent_notification", "create", create)
+    hass.services.async_register("persistent_notification", "dismiss", dismiss)
+    hass.states.async_set("sensor.room_temperature", "18")
+    hass.states.async_set("sensor.room_humidity", "unavailable")
+    controller = ZealDryController(
+        hass=hass,
+        entry_id="test",
+        zone_name="Test Zone",
+        temperature_entity="sensor.room_temperature",
+        humidity_entity="sensor.room_humidity",
+    )
+
+    await controller._async_check_sensor_health(dt_util.utcnow())
+    assert creates == []
+    freezer.tick(SENSOR_OFFLINE_DEBOUNCE_SECONDS + 1)
+    await controller._async_check_sensor_health(dt_util.utcnow())
+    await controller._async_check_sensor_health(dt_util.utcnow())
+    assert len(creates) == 1
+    assert "sensor.room_humidity" in creates[0]["message"]
+
+    hass.states.async_set("sensor.room_humidity", "62")
+    await controller._async_check_sensor_health(dt_util.utcnow())
+    assert len(dismisses) == 1
 
 
 async def test_weather_entity_adds_external_context_without_changing_demand(hass):
