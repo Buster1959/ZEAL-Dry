@@ -76,7 +76,7 @@ Required indoor sensors use the same four-hour `last_reported` availability
 window as ZEAL-Heat so quiet battery devices are not falsely declared offline.
 Battery metadata, associated node/connectivity state and rate-limited Home
 Assistant refresh probes for known mains-powered devices provide additional
-health evidence. A separate 30-minute confirmation limit prevents an old reading
+health evidence. A separate 90-minute confirmation limit prevents an old reading
 from starting or continuing energy-consuming Dry operation. One
 persistent warning is created after five continuous unhealthy minutes and is
 dismissed automatically when the sensor recovers.
