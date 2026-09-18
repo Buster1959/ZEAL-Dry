@@ -15,6 +15,29 @@ def test_config_flow_errors_are_readable_in_panel():
     )
 
 
+def test_fault_status_uses_exact_sensor_reason():
+    """Do not hide an actionable sensor diagnosis behind sensor_unavailable."""
+    controller = SimpleNamespace(
+        command_error=None,
+        input_error="humidity sensor is stale",
+        decision=SimpleNamespace(demand=False),
+        rest_cause=None,
+        timing=SimpleNamespace(
+            minimum_rest=timedelta(minutes=10),
+            minimum_run=timedelta(minutes=20),
+            recovery_period=timedelta(minutes=10),
+        ),
+        state_snapshot=SimpleNamespace(
+            state=SimpleNamespace(value="fault"),
+            reason="sensor_unavailable",
+            drying_started_at=None,
+            drying_stopped_at=None,
+        ),
+    )
+
+    assert _status(controller)["detail"] == "humidity sensor is stale"
+
+
 def test_restart_rest_countdown_is_explained():
     """A protected restart must look like a countdown, not an unexplained fault."""
     stopped_at = dt_util.utcnow() - timedelta(minutes=2)

@@ -86,7 +86,11 @@ def _status(controller) -> dict:
     remaining = _remaining_seconds(controller)
     if controller.command_error or snapshot.state.value == "fault":
         title = "Control fault"
-        detail = controller.command_error or snapshot.reason
+        detail = (
+            controller.command_error
+            or getattr(controller, "input_error", None)
+            or snapshot.reason
+        )
         tone = "fault"
     elif snapshot.reason == "minimum_rest_time_active":
         title = "Awaiting start"
@@ -234,6 +238,7 @@ def _configuration(hass: HomeAssistant, entry_id: str) -> dict:
                 }
                 for adapter in controller._climate_adapters()
             ],
+            "sensor_health": controller.sensor_health_snapshot(),
         },
         "setup": {
             "show_in_sidebar": entry.options.get(CONF_SHOW_IN_SIDEBAR, True),

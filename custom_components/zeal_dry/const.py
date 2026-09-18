@@ -5,7 +5,7 @@ DOMAIN = "zeal_dry"
 PANEL_COMPONENT = "zeal-dry-panel"
 PANEL_URL_PATH = "zeal-dry"
 PANEL_STATIC_URL = "/zeal_dry_static"
-PANEL_ASSET_VERSION = "7"
+PANEL_ASSET_VERSION = "8"
 
 CONF_ZONE_NAME = "zone_name"
 CONF_TEMPERATURE_ENTITY = "temperature_entity"
@@ -22,10 +22,13 @@ DEFAULT_TEST_TEMPERATURE_C = 18.0
 DEFAULT_TEST_HUMIDITY = 55.0
 
 # ``last_reported`` distinguishes a quiet healthy sensor from one that has
-# stopped reporting. ZEAL-Dry uses a shorter limit than ZEAL-Heat because an
-# accepted reading can directly justify energy-consuming Dry operation.
+# stopped reporting. Device health matches ZEAL-Heat so sleeping battery
+# sensors are not falsely declared offline. The shorter control limit is
+# checked separately before a reading can justify energy-consuming Dry operation.
 SENSOR_OFFLINE_DEBOUNCE_SECONDS = 5 * 60
-SENSOR_STALE_THRESHOLD_SECONDS = 30 * 60
+SENSOR_STALE_THRESHOLD_SECONDS = 4 * 60 * 60
+SENSOR_CONTROL_FRESHNESS_SECONDS = 30 * 60
+SENSOR_PROBE_INTERVAL_SECONDS = 30 * 60
 
 DATA_CONTROLLERS = "controllers"
 

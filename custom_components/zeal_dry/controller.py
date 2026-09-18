@@ -15,6 +15,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import Event, HomeAssistant, State, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
@@ -31,7 +32,9 @@ from .const import (
     DEFAULT_TEST_HUMIDITY,
     DEFAULT_TEST_TEMPERATURE_C,
     DOMAIN,
+    SENSOR_CONTROL_FRESHNESS_SECONDS,
     SENSOR_OFFLINE_DEBOUNCE_SECONDS,
+    SENSOR_PROBE_INTERVAL_SECONDS,
     SENSOR_STALE_THRESHOLD_SECONDS,
 )
 from .decision import DryingDecision, MoistureThresholds, evaluate_moisture
@@ -326,6 +329,7 @@ class ZealDryController:
     async def _async_refresh(self) -> None:
         """Evaluate inputs, enforce protections, command equipment, then publish."""
         now = dt_util.utcnow()
+        await self._async_probe_mains_sensors(now)
         self._update_environment(now)
         await self._async_check_sensor_health(now)
         await self._async_update_weather_forecast(now)
@@ -342,6 +346,10 @@ class ZealDryController:
                 temperature_c = self.test_temperature_c
                 humidity = self.test_humidity
             else:
+                self._ensure_mains_node_available(
+                    self.temperature_entity, "temperature"
+                )
+                self._ensure_mains_node_available(self.humidity_entity, "humidity")
                 temperature_c = self._temperature_c(
                     self.hass.states.get(self.temperature_entity)
                     if self.temperature_entity
@@ -375,6 +383,15 @@ class ZealDryController:
                 elapsed,
                 self.settings.response_profile,
             )
+            if (
+                self.decision.demand
+                or self.state_snapshot.state is ControllerState.DRYING
+            ) and not self._inputs_fresh_for_control(now):
+                self.input_error = (
+                    "Indoor sensor confirmation is older than 30 minutes; "
+                    "Dry control is suspended"
+                )
+                self.decision = evaluate_moisture(None, self.thresholds)
         except EnvironmentalInputError as err:
             self.environmental_reading = None
             self.proposed_setpoint = None
@@ -577,6 +594,159 @@ class ZealDryController:
         except (TypeError, ValueError) as err:
             raise EnvironmentalInputError(f"{label} state is not numeric") from err
 
+    def _sensor_entity_ids(self) -> list[str]:
+        """Return configured indoor sensors without duplicates."""
+        return list(
+            dict.fromkeys(
+                entity_id
+                for entity_id in (self.temperature_entity, self.humidity_entity)
+                if entity_id
+            )
+        )
+
+    def _associated_states(self, entity_id: str) -> list[State]:
+        """Return Home Assistant states belonging to the sensor's device."""
+        registry = er.async_get(self.hass)
+        registry_entry = registry.async_get(entity_id)
+        if registry_entry is None or registry_entry.device_id is None:
+            return []
+        return [
+            state
+            for entry in registry.entities.values()
+            if entry.device_id == registry_entry.device_id
+            and (state := self.hass.states.get(entry.entity_id)) is not None
+        ]
+
+    def _sensor_power_source(self, entity_id: str) -> str:
+        """Classify a sensor conservatively from HA state and device metadata."""
+        state = self.hass.states.get(entity_id)
+        power_source = str(
+            state.attributes.get("power_source", "") if state else ""
+        ).casefold()
+        if any(word in power_source for word in ("battery", "coin cell")):
+            return "battery"
+        if power_source in {"mains", "line", "line power", "usb", "ac"}:
+            return "mains"
+        associated = self._associated_states(entity_id)
+        if any(
+            item.attributes.get("device_class") == "battery"
+            or item.entity_id.split(".", 1)[-1].endswith("_battery")
+            for item in associated
+        ):
+            return "battery"
+        return "unknown"
+
+    def _node_status(self, entity_id: str) -> tuple[str, str | None]:
+        """Return associated connectivity evidence without waking a battery node."""
+        positive = {"on", "online", "connected", "home", "available"}
+        negative = {"off", "offline", "disconnected", "not_home", "unavailable"}
+        for state in self._associated_states(entity_id):
+            object_id = state.entity_id.split(".", 1)[-1]
+            is_connectivity = state.attributes.get("device_class") == "connectivity"
+            is_status = object_id.endswith(
+                ("_availability", "_connectivity", "_node_status", "_online")
+            )
+            if not (is_connectivity or is_status):
+                continue
+            value = state.state.casefold()
+            if value in positive:
+                return "online", state.entity_id
+            if value in negative:
+                return "offline", state.entity_id
+        return "unknown", None
+
+    def _ensure_mains_node_available(
+        self, entity_id: str | None, label: str
+    ) -> None:
+        """Reject explicit offline evidence only for known mains-powered devices."""
+        if not entity_id or self._sensor_power_source(entity_id) != "mains":
+            return
+        node_state, _node_entity = self._node_status(entity_id)
+        if node_state == "offline":
+            raise EnvironmentalInputError(f"{label} mains-powered node is offline")
+
+    async def _async_probe_mains_sensors(self, now: datetime) -> None:
+        """Ask HA to refresh quiet mains sensors before judging connectivity."""
+        probe_times = self.hass.data.setdefault(DOMAIN, {}).setdefault(
+            "sensor_probe_times", {}
+        )
+        for entity_id in self._sensor_entity_ids():
+            if self._sensor_power_source(entity_id) != "mains":
+                continue
+            last_probe = probe_times.get(entity_id)
+            state = self.hass.states.get(entity_id)
+            last_reported = (
+                getattr(state, "last_reported", state.last_updated) if state else None
+            )
+            needs_probe = (
+                last_probe is None
+                or last_reported is None
+                or (now - last_reported).total_seconds()
+                > SENSOR_CONTROL_FRESHNESS_SECONDS
+            )
+            probe_is_recent = last_probe is not None and (
+                now - last_probe
+            ).total_seconds() < SENSOR_PROBE_INTERVAL_SECONDS
+            if not needs_probe or probe_is_recent:
+                continue
+            probe_times[entity_id] = now
+            _node_state, node_entity = self._node_status(entity_id)
+            targets = [entity_id]
+            if node_entity:
+                targets.append(node_entity)
+            try:
+                await self.hass.services.async_call(
+                    "homeassistant",
+                    "update_entity",
+                    {"entity_id": targets},
+                    blocking=True,
+                )
+            except (HomeAssistantError, TimeoutError):
+                pass
+
+    def _inputs_fresh_for_control(self, now: datetime) -> bool:
+        """Require recent telemetry before starting or continuing costly Dry control."""
+        for entity_id in self._sensor_entity_ids():
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                return False
+            last_reported = getattr(state, "last_reported", state.last_updated)
+            if (
+                now - last_reported
+            ).total_seconds() > SENSOR_CONTROL_FRESHNESS_SECONDS:
+                return False
+        return True
+
+    def sensor_health_snapshot(self) -> list[dict]:
+        """Expose understandable power, connectivity and report-age evidence."""
+        now = dt_util.utcnow()
+        snapshot = []
+        for entity_id in self._sensor_entity_ids():
+            state = self.hass.states.get(entity_id)
+            node_status, node_entity = self._node_status(entity_id)
+            last_reported = (
+                getattr(state, "last_reported", state.last_updated) if state else None
+            )
+            snapshot.append(
+                {
+                    "entity_id": entity_id,
+                    "power_source": self._sensor_power_source(entity_id),
+                    "node_status": node_status,
+                    "node_entity": node_entity,
+                    "report_age_minutes": (
+                        max(0, int((now - last_reported).total_seconds() / 60))
+                        if last_reported
+                        else None
+                    ),
+                    "fresh_for_control": (
+                        last_reported is not None
+                        and (now - last_reported).total_seconds()
+                        <= SENSOR_CONTROL_FRESHNESS_SECONDS
+                    ),
+                }
+            )
+        return snapshot
+
     def _configured_sensor_health(self) -> list[tuple[str, str, str | None]]:
         """Return every required input and its exact current health problem."""
         results: list[tuple[str, str, str | None]] = []
@@ -587,6 +757,7 @@ class ZealDryController:
             if not entity_id:
                 continue
             try:
+                self._ensure_mains_node_available(entity_id, label)
                 self._numeric_state(self.hass.states.get(entity_id), label)
             except EnvironmentalInputError as err:
                 results.append((label, entity_id, str(err)))

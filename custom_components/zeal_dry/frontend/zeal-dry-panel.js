@@ -199,6 +199,7 @@ class ZealDryPanel extends HTMLElement {
             <span class="pill ${acu.available ? "ok" : "bad"}">${acu.available ? this._escape(acu.state) : "Unavailable"}</span>
           </div>`).join("")
       : `<p class="muted">No live ACU is configured.</p>`;
+    const sensors = state.sensor_health.map((sensor) => `<div class="acu-row"><div><strong>${this._escape(sensor.entity_id)}</strong><small>${this._escape(sensor.power_source)} power · node ${this._escape(sensor.node_status)}</small></div><span class="pill ${sensor.fresh_for_control ? "ok" : "bad"}">${sensor.report_age_minutes === null ? "No report" : `${sensor.report_age_minutes} min ago`}</span></div>`).join("");
     return `
       <article class="zone-card ${this._escape(status.tone)}">
       <div class="zone-title"><div><h2>${this._escape(config.zone_name)}</h2><span>${this._escape(status.title)}${timer ? ` — ${timer}` : ""}</span></div><span class="risk ${this._escape(state.risk)}">${this._escape(state.risk)}</span></div>
@@ -217,6 +218,7 @@ class ZealDryPanel extends HTMLElement {
       <details><summary>Zone details</summary><div class="grid two details-grid">
         <article><h3>Controller</h3><dl><dt>State</dt><dd>${this._escape(state.state)}</dd><dt>Decision</dt><dd>${this._escape(state.reason)}</dd><dt>Drying response</dt><dd>${this._escape(config.setup.settings.response_profile.replaceAll("_", " "))}</dd><dt>Dry target</dt><dd>${this._number(state.proposed_target_c, " °C")}</dd><dt>Fault</dt><dd>${this._escape(state.fault || "None")}</dd></dl></article>
         <article><h3>Air-conditioning units</h3>${acus}</article>
+        <article><h3>Sensor health</h3>${sensors}</article>
         <article><h3>External environment ${this._historyLink([external.entity_id], "Open outdoor weather history")}</h3>${external.entity_id ? `<dl><dt>Source</dt><dd>${this._escape(external.entity_id)}</dd><dt>Temperature</dt><dd>${this._number(external.temperature_c, " °C")}</dd><dt>Humidity</dt><dd>${this._number(external.humidity, "%")}</dd><dt>Dew point</dt><dd>${this._number(external.dew_point_c, " °C")}</dd><dt>Indoor minus outdoor DP</dt><dd>${this._number(external.dew_point_difference_c, " °C")}</dd></dl>${external.error ? `<p class="muted">${this._escape(external.error)}</p>` : ""}` : `<p class="muted">No external weather entity is configured.</p>`}</article>
         <article class="outlook ${this._escape(outlook.level)}"><h3>Outdoor dew-point outlook</h3><strong>${this._escape(outlook.level)}</strong><p>${this._escape(outlook.explanation)}</p><small>Forecast outlook informs preparedness; current indoor readings remain responsible for Dry demand.</small></article>
       </div></details></article>`;

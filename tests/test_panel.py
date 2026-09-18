@@ -82,6 +82,8 @@ def test_frontend_has_focused_tabs_and_status_banner():
     assert "_historyUrl(entityIds)" in source
     assert "Open ${label} history" in source
     assert "Outdoor dew-point outlook" in source
+    assert "Sensor health" in source
+    assert "report_age_minutes" in source
     assert "Early protection — act from Elevated risk" in source
     assert "Balanced — act from High risk" in source
     assert "Economy — act at Critical risk" in source

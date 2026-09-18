@@ -8,6 +8,7 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.util import dt as dt_util
 
 from custom_components.zeal_dry.const import (
+    SENSOR_CONTROL_FRESHNESS_SECONDS,
     SENSOR_OFFLINE_DEBOUNCE_SECONDS,
     SENSOR_STALE_THRESHOLD_SECONDS,
 )
@@ -65,8 +66,8 @@ async def test_unavailable_input_clears_reading(hass):
     await controller.async_stop()
 
 
-async def test_quiet_sensor_uses_thirty_minute_stale_period(hass, freezer):
-    """A quiet reading stays usable for 30 minutes, then suspends Dry control."""
+async def test_quiet_sensor_uses_heat_availability_period(hass, freezer):
+    """A quiet battery-style reading is not falsely unavailable after 30 minutes."""
     hass.states.async_set("sensor.room_humidity", "63")
     state = hass.states["sensor.room_humidity"]
 
@@ -76,6 +77,36 @@ async def test_quiet_sensor_uses_thirty_minute_stale_period(hass, freezer):
     freezer.tick(2)
     with pytest.raises(EnvironmentalInputError, match="humidity sensor is stale"):
         ZealDryController._numeric_state(state, "humidity")
+
+
+async def test_old_reading_cannot_authorise_dry_control(hass, freezer):
+    """Retain the 30-minute energy safeguard separately from sensor health."""
+    hass.states.async_set("sensor.room_temperature", "18")
+    hass.states.async_set("sensor.room_humidity", "70")
+    controller = ZealDryController(
+        hass=hass,
+        entry_id="test",
+        zone_name="Test Zone",
+        temperature_entity="sensor.room_temperature",
+        humidity_entity="sensor.room_humidity",
+    )
+
+    freezer.tick(SENSOR_CONTROL_FRESHNESS_SECONDS + 1)
+
+    assert controller._numeric_state(
+        hass.states["sensor.room_humidity"], "humidity"
+    ) == 70
+    assert controller._inputs_fresh_for_control(dt_util.utcnow()) is False
+
+
+async def test_explicit_power_source_identifies_mains_sensor(hass):
+    """Use HA power metadata before deciding whether an active probe is safe."""
+    hass.states.async_set(
+        "sensor.room_temperature", "18", {"power_source": "mains"}
+    )
+    controller = ZealDryController(hass=hass, entry_id="test", zone_name="Test")
+
+    assert controller._sensor_power_source("sensor.room_temperature") == "mains"
 
 
 async def test_sensor_warning_is_debounced_once_and_dismissed(hass, freezer):
