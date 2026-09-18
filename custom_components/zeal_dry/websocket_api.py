@@ -17,6 +17,8 @@ from .const import (
     CONF_SHOW_IN_SIDEBAR,
     CONF_TEMPERATURE_ENTITY,
     CONF_WEATHER_ENTITY,
+    CONF_ZONE_NAME,
+    CONTROL_MODE_CLIMATE,
     DATA_CONTROLLERS,
     DOMAIN,
 )
@@ -31,7 +33,14 @@ def async_register_commands(hass: HomeAssistant) -> None:
     """Register panel commands once across config-entry reloads."""
     if hass.data.get(_REGISTERED):
         return
-    for command in (ws_list_entries, ws_get_configuration, ws_set_profile, ws_save_setup):
+    for command in (
+        ws_list_entries,
+        ws_get_configuration,
+        ws_set_profile,
+        ws_save_setup,
+        ws_create_zone,
+        ws_remove_zone,
+    ):
         websocket_api.async_register_command(hass, command)
     hass.data[_REGISTERED] = True
 
@@ -360,3 +369,96 @@ async def ws_save_setup(hass, connection, msg) -> None:
         },
     )
     connection.send_result(msg["id"], {"saved": True})
+
+
+def _flow_error(result: dict) -> str:
+    """Turn a config-flow failure into a useful panel message."""
+    errors = result.get("errors") or {}
+    if errors:
+        return ", ".join(f"{field}: {error}" for field, error in errors.items())
+    return result.get("reason") or "ZEAL-Dry could not create the zone"
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "zeal_dry/create_zone",
+        vol.Required("zone_name"): str,
+        vol.Required("temperature_entity"): str,
+        vol.Required("humidity_entity"): str,
+        vol.Optional("weather_entity", default=""): str,
+        vol.Required("climate_entities"): [str],
+    }
+)
+@websocket_api.async_response
+async def ws_create_zone(hass, connection, msg) -> None:
+    """Create a live-control zone through the validated config flow."""
+    zone_name = msg["zone_name"].strip()
+    if not zone_name:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_INVALID_FORMAT, "Enter a zone name"
+        )
+        return
+    try:
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": "user"},
+            data={CONF_ZONE_NAME: zone_name, "control_mode": CONTROL_MODE_CLIMATE},
+        )
+        if result["type"] != "form" or result["step_id"] != "sensors":
+            raise ValueError(_flow_error(result))
+        sensors = {
+            CONF_TEMPERATURE_ENTITY: msg["temperature_entity"],
+            CONF_HUMIDITY_ENTITY: msg["humidity_entity"],
+        }
+        if msg.get("weather_entity"):
+            sensors[CONF_WEATHER_ENTITY] = msg["weather_entity"]
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], sensors
+        )
+        if result["type"] != "form" or result["step_id"] != "climate":
+            raise ValueError(_flow_error(result))
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {CONF_CLIMATE_ENTITIES: msg["climate_entities"]},
+        )
+        if result["type"] != "create_entry":
+            raise ValueError(_flow_error(result))
+    except (HomeAssistantError, KeyError, ValueError) as err:
+        connection.send_error(msg["id"], websocket_api.ERR_INVALID_FORMAT, str(err))
+        return
+    entry = result["result"]
+    connection.send_result(
+        msg["id"], {"created": True, "entry_id": entry.entry_id}
+    )
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "zeal_dry/remove_zone",
+        vol.Required("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_remove_zone(hass, connection, msg) -> None:
+    """Remove one zone after its controller has safely stopped owned equipment."""
+    entry = hass.config_entries.async_get_entry(msg["entry_id"])
+    entries = hass.config_entries.async_entries(DOMAIN)
+    if entry is None or entry.domain != DOMAIN:
+        _send_not_found(connection, msg)
+        return
+    if len(entries) <= 1:
+        connection.send_error(
+            msg["id"],
+            websocket_api.ERR_INVALID_FORMAT,
+            "The final ZEAL-Dry zone must be removed from Devices & Services",
+        )
+        return
+    removed = await hass.config_entries.async_remove(entry.entry_id)
+    if not removed:
+        connection.send_error(
+            msg["id"], websocket_api.ERR_UNKNOWN_ERROR, "The zone could not be removed"
+        )
+        return
+    connection.send_result(msg["id"], {"removed": True})

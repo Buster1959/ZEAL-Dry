@@ -5,7 +5,14 @@ from types import SimpleNamespace
 
 from homeassistant.util import dt as dt_util
 
-from custom_components.zeal_dry.websocket_api import _status
+from custom_components.zeal_dry.websocket_api import _flow_error, _status
+
+
+def test_config_flow_errors_are_readable_in_panel():
+    """Expose the field and cause when in-panel zone creation is rejected."""
+    assert _flow_error({"errors": {"climate_entities": "unsupported_climate"}}) == (
+        "climate_entities: unsupported_climate"
+    )
 
 
 def test_restart_rest_countdown_is_explained():

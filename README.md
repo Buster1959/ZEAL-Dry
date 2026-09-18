@@ -29,14 +29,16 @@ ZEAL-Dry → Configure**. The panel remains available directly at `/zeal-dry`.
 
 ## Web UI
 
-Version 0.3.6 adds a dedicated Home Assistant panel with the focused tabs agreed
+Version 0.3.7 adds a dedicated Home Assistant panel with the focused tabs agreed
 for ZEAL-Dry:
 
-- **Overview** — live moisture risk, demand, ACU state, an `HH:MM:SS` Drying
-  runtime and protected-start countdown, clickable Home Assistant history for
-  indoor readings, and a six-hour outdoor dew-point outlook.
-- **Overrides** — switch between Property Protection, Occupied and Off profiles.
-- **Setup** — define each independently measured zone with one indoor
+- **Overview** — one combined view of every zone, with live moisture risk,
+  demand, ACU state, an `HH:MM:SS` Drying runtime and protected-start countdown,
+  clickable Home Assistant history, and a six-hour outdoor dew-point outlook.
+- **Overrides** — switch each zone independently between Property Protection,
+  Occupied and Off profiles from the same page.
+- **Setup** — add, edit and remove zones inside the ZEAL-Dry panel. Define each
+  independently measured zone with one indoor
   temperature/humidity pair, one or more Dry-capable ACUs, and an optional
   standard Home Assistant weather entity for outdoor dew-point comparison. A
   Drying response selector chooses Early protection, Balanced or Economy while
@@ -46,7 +48,7 @@ Home Assistant entities remain available for dashboards and automations.
 
 ## Current development status
 
-Version 0.3.6 implements Blocks 6–7 plus the dedicated Web UI: Dry-capable
+Version 0.3.7 implements Blocks 6–7 plus the dedicated Web UI: Dry-capable
 multi-ACU control, restart protection, persistent settings, recoverable equipment
 availability, and Home Assistant status/control entities. Live operation remains
 a controlled prototype and should be tested under supervision on your AC.

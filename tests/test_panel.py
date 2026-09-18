@@ -87,6 +87,13 @@ def test_frontend_has_focused_tabs_and_status_banner():
     assert "Economy — act at Critical risk" in source
     assert 'class="risk-guide"' in source
     assert "assigned to ${this._escape(item.assigned_zone)}" in source
+    assert 'data-action="show-add-zone"' in source
+    assert 'type: "zeal_dry/create_zone"' in source
+    assert 'type: "zeal_dry/remove_zone"' in source
+    assert (
+        "this._configurations.map((config) => this._zoneOverview(config))" in source
+    )
+    assert "Changes apply immediately to the selected zone" in source
     assert "Show ZEAL-Dry in the Home Assistant sidebar" in source
     assert 'if (!customElements.get("zeal-dry-panel"))' in source
     assert 'customElements.define("zeal-dry-panel", ZealDryPanel);' in source
