@@ -29,7 +29,7 @@ ZEAL-Dry → Configure**. The panel remains available directly at `/zeal-dry`.
 
 ## Web UI
 
-Version 0.3.5 adds a dedicated Home Assistant panel with the focused tabs agreed
+Version 0.3.6 adds a dedicated Home Assistant panel with the focused tabs agreed
 for ZEAL-Dry:
 
 - **Overview** — live moisture risk, demand, ACU state, an `HH:MM:SS` Drying
@@ -46,10 +46,14 @@ Home Assistant entities remain available for dashboards and automations.
 
 ## Current development status
 
-Version 0.3.5 implements Blocks 6–7 plus the dedicated Web UI: Dry-capable
+Version 0.3.6 implements Blocks 6–7 plus the dedicated Web UI: Dry-capable
 multi-ACU control, restart protection, persistent settings, recoverable equipment
 availability, and Home Assistant status/control entities. Live operation remains
 a controlled prototype and should be tested under supervision on your AC.
+
+Each climate entity can belong to only one ZEAL-Dry zone. Creation,
+reconfiguration, panel saves and startup all reject duplicate ACU ownership so
+two independent controllers can never command the same equipment.
 
 Required indoor sensors are judged by Home Assistant's `last_reported` timestamp
 and remain trusted for up to 30 minutes. This deliberately shorter limit prevents

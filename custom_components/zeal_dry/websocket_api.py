@@ -21,6 +21,7 @@ from .const import (
     DOMAIN,
 )
 from .hvac import ClimateAdapter
+from .ownership import climate_conflict_message, find_climate_owner
 from .settings import NUMBER_SETTINGS, OPTION_SETTINGS, SELECT_SETTINGS
 
 _REGISTERED = f"{DOMAIN}_websocket_registered"
@@ -111,7 +112,7 @@ def _status(controller) -> dict:
     }
 
 
-def _catalog(hass: HomeAssistant) -> dict:
+def _catalog(hass: HomeAssistant, entry_id: str) -> dict:
     """Return eligible entities for administrator Setup selectors."""
     temperature = []
     humidity = []
@@ -129,6 +130,11 @@ def _catalog(hass: HomeAssistant) -> dict:
         elif state.domain == "climate":
             modes = state.attributes.get("hvac_modes", [])
             if "dry" in modes and "off" in modes:
+                conflict = find_climate_owner(
+                    hass, [state.entity_id], exclude_entry_id=entry_id
+                )
+                if conflict:
+                    item["assigned_zone"] = conflict[1].title
                 climates.append(item)
         elif state.domain == "weather":
             weather.append(item)
@@ -228,7 +234,7 @@ def _configuration(hass: HomeAssistant, entry_id: str) -> dict:
             "climate_entities": climates,
             "settings": controller.settings.as_dict(),
         },
-        "catalog": _catalog(hass),
+        "catalog": _catalog(hass, entry_id),
     }
 
 
@@ -314,6 +320,13 @@ async def ws_save_setup(hass, connection, msg) -> None:
             raise ValueError("Select at least one ACU")
         for entity_id in msg["climate_entities"]:
             ClimateAdapter(hass, entity_id).inspect()
+        conflict = find_climate_owner(
+            hass,
+            msg["climate_entities"],
+            exclude_entry_id=entry.entry_id,
+        )
+        if conflict:
+            raise ValueError(climate_conflict_message(*conflict))
         weather_entity = msg.get("weather_entity") or None
         if weather_entity:
             weather_state = hass.states.get(weather_entity)

@@ -24,6 +24,11 @@ Does not own:
 - state transitions
 - service calls
 
+Temperature, humidity and weather inputs may be shared temporarily across
+zones. Climate entities may not: each ACU has exactly one owning ZEAL-Dry
+configuration entry. Creation, reconfiguration, panel saves and startup all
+reject duplicate ACU ownership rather than allowing split-brain control.
+
 ### 2. Environmental Model
 Inputs:
 - temperature

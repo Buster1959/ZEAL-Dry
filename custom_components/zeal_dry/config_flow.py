@@ -22,6 +22,7 @@ from .const import (
     DEFAULT_CONTROL_MODE,
     DOMAIN,
 )
+from .ownership import find_climate_owner
 
 
 class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -139,6 +140,13 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         ClimateAdapter(self.hass, entity_id).inspect()
                 except HomeAssistantError:
                     errors[CONF_CLIMATE_ENTITIES] = "unsupported_climate"
+                conflict = find_climate_owner(
+                    self.hass,
+                    user_input[CONF_CLIMATE_ENTITIES],
+                    exclude_entry_id=entry.entry_id,
+                )
+                if conflict:
+                    errors[CONF_CLIMATE_ENTITIES] = "climate_already_assigned"
             if not errors:
                 updated_data = dict(entry.data)
                 updated_data.update(user_input)
@@ -225,8 +233,12 @@ class ZealDryConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except HomeAssistantError:
                 errors[CONF_CLIMATE_ENTITIES] = "unsupported_climate"
             else:
-                self._climate_entities = list(entities)
-                return await self._async_create_zone(**self._sensors)
+                conflict = find_climate_owner(self.hass, entities)
+                if conflict:
+                    errors[CONF_CLIMATE_ENTITIES] = "climate_already_assigned"
+                else:
+                    self._climate_entities = list(entities)
+                    return await self._async_create_zone(**self._sensors)
         return self.async_show_form(
             step_id="climate",
             data_schema=vol.Schema(

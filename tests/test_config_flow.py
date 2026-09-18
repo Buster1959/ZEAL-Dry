@@ -81,6 +81,38 @@ async def test_live_flow_accepts_multiple_climate_entities(hass):
     ]
 
 
+async def test_live_flow_rejects_acu_owned_by_another_zone(hass):
+    """Never allow two independently measured zones to command one ACU."""
+    owner = MockConfigEntry(
+        domain=DOMAIN,
+        title="Lounge",
+        unique_id="lounge",
+        data={
+            "zone_name": "Lounge",
+            "control_mode": "climate",
+            "temperature_entity": "sensor.lounge_temp",
+            "humidity_entity": "sensor.lounge_rh",
+            "climate_entities": ["climate.shared"],
+        },
+    )
+    owner.add_to_hass(hass)
+    hass.states.async_set("sensor.temp", "18")
+    hass.states.async_set("sensor.rh", "60")
+    hass.states.async_set("climate.shared", "off", {"hvac_modes": ["dry", "off"]})
+
+    result = await start(hass, "climate")
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {"temperature_entity": "sensor.temp", "humidity_entity": "sensor.rh"},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"climate_entities": ["climate.shared"]}
+    )
+
+    assert result["type"] == "form"
+    assert result["errors"]["climate_entities"] == "climate_already_assigned"
+
+
 async def test_sole_weather_entity_is_saved_as_default_context(hass):
     """Offer HA's unambiguous weather entity without requiring provider knowledge."""
     hass.states.async_set("sensor.temp", "18")

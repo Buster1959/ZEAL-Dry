@@ -5,6 +5,7 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryError
 
 from .const import (
     CONF_CLIMATE_ENTITY,
@@ -20,6 +21,7 @@ from .const import (
 )
 from .controller import ZealDryController
 from .panel import async_remove_panel, async_sync_panel
+from .ownership import climate_conflict_message, climate_entities, find_climate_owner
 from .websocket_api import async_register_commands
 
 PLATFORMS = [
@@ -40,6 +42,13 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Start the zone controller and load its Home Assistant entity platforms."""
+    conflict = find_climate_owner(
+        hass,
+        climate_entities(entry),
+        exclude_entry_id=entry.entry_id,
+    )
+    if conflict:
+        raise ConfigEntryError(climate_conflict_message(*conflict))
     hass.data.setdefault(DOMAIN, {})
     controllers = hass.data[DOMAIN].setdefault(DATA_CONTROLLERS, {})
     controller = ZealDryController(

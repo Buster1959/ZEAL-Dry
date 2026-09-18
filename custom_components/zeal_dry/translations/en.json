@@ -49,7 +49,8 @@
     "error": {
       "entity_not_found": "The selected entity is not currently available in Home Assistant.",
       "zone_name_required": "Enter a name for this ZEAL-Dry zone.",
-      "unsupported_climate": "Select an available climate entity supporting Dry and Off modes."
+      "unsupported_climate": "Select an available climate entity supporting Dry and Off modes.",
+      "climate_already_assigned": "One or more selected ACUs already belong to another ZEAL-Dry zone. Remove the ACU from its existing zone before assigning it here."
     },
     "abort": {
       "already_configured": "A ZEAL-Dry zone with this name is already configured.",
